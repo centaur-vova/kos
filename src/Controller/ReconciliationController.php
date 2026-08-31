@@ -25,48 +25,57 @@ final readonly class ReconciliationController
         $this->logger->info('Reconciliation requested');
 
         $pdo = $this->db->getConnection();
+        $pdo->beginTransaction();
 
-        // Оплачен, но не выдан
-        $stmt = $pdo->prepare(
-            "SELECT * FROM orders
-             WHERE status IN (:created, :paid, :delivering, :delivery_failed, :out_of_stock)
-             AND paid_at IS NOT NULL
-             AND updated_at < NOW() - INTERVAL '1 minute' * :stuck_after_min
-             ORDER BY created_at"
-        );
-        $stmt->execute([
-            'created' => OrderStatus::Created->value,
-            'paid' => OrderStatus::Paid->value,
-            'delivering' => OrderStatus::Delivering->value,
-            'delivery_failed' => OrderStatus::DeliveryFailed->value,
-            'out_of_stock' => OrderStatus::OutOfStock->value,
-            'stuck_after_min' => $this->options->recoveryStuckAfterMin,
-        ]);
-        $paidNotDelivered = $stmt->fetchAll();
+        // Обернём в транзакцию
+        try {
+            // Оплачен, но не выдан
+            $stmt = $pdo->prepare(
+                "SELECT * FROM orders
+                WHERE status IN (:created, :paid, :delivering, :delivery_failed, :out_of_stock)
+                AND paid_at IS NOT NULL
+                AND updated_at < NOW() - INTERVAL '1 minute' * :stuck_after_min
+                ORDER BY created_at"
+            );
+            $stmt->execute([
+                'created' => OrderStatus::Created->value,
+                'paid' => OrderStatus::Paid->value,
+                'delivering' => OrderStatus::Delivering->value,
+                'delivery_failed' => OrderStatus::DeliveryFailed->value,
+                'out_of_stock' => OrderStatus::OutOfStock->value,
+                'stuck_after_min' => $this->options->recoveryStuckAfterMin,
+            ]);
+            $paidNotDelivered = $stmt->fetchAll();
 
-        // Выдан, но не оплачен
-        $stmt = $pdo->prepare(
-            "SELECT * FROM orders
-             WHERE status = :delivered
-             AND paid_at IS NULL
-             ORDER BY created_at"
-        );
-        $stmt->execute([
-            'delivered' => OrderStatus::Delivered->value,
-        ]);
-        $deliveredNotPaid = $stmt->fetchAll();
+            // Выдан, но не оплачен
+            $stmt = $pdo->prepare(
+                "SELECT * FROM orders
+                WHERE status = :delivered
+                AND paid_at IS NULL
+                ORDER BY created_at"
+            );
+            $stmt->execute([
+                'delivered' => OrderStatus::Delivered->value,
+            ]);
+            $deliveredNotPaid = $stmt->fetchAll();
 
-        // Зависшие в delivering
-        $stmt = $pdo->prepare(
-            "SELECT * FROM orders
-             WHERE status = :delivering
-             AND updated_at < NOW() - INTERVAL '1 minute'
-             ORDER BY updated_at"
-        );
-        $stmt->execute([
-            'delivering' => OrderStatus::Delivering->value,
-        ]);
-        $stuckDelivering = $stmt->fetchAll();
+            // Зависшие в delivering
+            $stmt = $pdo->prepare(
+                "SELECT * FROM orders
+                WHERE status = :delivering
+                AND updated_at < NOW() - INTERVAL '1 minute'
+                ORDER BY updated_at"
+            );
+            $stmt->execute([
+                'delivering' => OrderStatus::Delivering->value,
+            ]);
+            $stuckDelivering = $stmt->fetchAll();
+
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
 
         return ApiResponse::success([
             'summary' => [

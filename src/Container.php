@@ -27,8 +27,11 @@ final class Container
         $builder->addDefinitions([
             Options::class => $options,
 
-            StorageInterface::class => create(SwooleTableStorage::class),
+            // Storage
+            SwooleTableStorage::class => static fn () => new SwooleTableStorage($options),
+            StorageInterface::class => static fn (\DI\Container $c) => $c->get(SwooleTableStorage::class),
 
+            // Server/infra
             LoggerInterface::class => static fn () => new StdoutLogger($options->logLevel),
             Database::class => static fn () => new Database($options),
             ProviderClient::class => static fn () => new ProviderClient($options),

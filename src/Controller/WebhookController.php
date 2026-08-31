@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\DTO\PaymentWebhook;
+use App\Exception\DomainException;
 use App\Http\ApiResponse;
 use Swoole\Http\Request;
 use App\Service\PaymentService;
@@ -36,6 +37,10 @@ final readonly class WebhookController
 
             $result = $this->paymentService->processWebhook($webhook);
             return ApiResponse::success($result);
+
+        } catch (DomainException $e) {
+            return ApiResponse::error($e->getMessage(), $e->getCode() ?: 400, $e->getErrorCode());
+
         } catch (\Throwable $e) {
             $this->logger->error('Webhook error', [
                 'error' => $e->getMessage(),
