@@ -13,7 +13,7 @@ ORDER=$(curl -s -X POST "$BASE_URL/orders" \
   -H "Content-Type: application/json" \
   -d '{"sku":"KEY-CS2-PRIME","user_id":"fallback_test"}')
 
-ORDER_CODE=$(echo "$ORDER" | jq -r '.order.order_code')
+ORDER_CODE=$(echo "$ORDER" | jq -r '.data.order.order_code')
 echo "Заказ создан: $ORDER_CODE"
 
 # Отправляем вебхук
@@ -25,7 +25,7 @@ echo "Вебхук: $RESULT"
 
 # Ждём до 30 секунд, пока заказ не доставлен
 for i in $(seq 1 30); do
-  STATUS=$(curl -s "$BASE_URL/orders/$ORDER_CODE" | jq -r '.order.status')
+  STATUS=$(curl -s "$BASE_URL/orders/$ORDER_CODE" | jq -r '.data.order.status')
   if [ "$STATUS" = "delivered" ]; then
     echo "Заказ доставлен (через ${i} сек)"
     break
@@ -35,8 +35,8 @@ done
 
 # Проверяем статус
 STATUS=$(curl -s "$BASE_URL/orders/$ORDER_CODE")
-PROVIDER=$(echo "$STATUS" | jq -r '.order.provider')
-DELIVERIES=$(echo "$STATUS" | jq '[.order.deliveries[] | select(.status == "issued")] | length')
+PROVIDER=$(echo "$STATUS" | jq -r '.data.order.provider')
+DELIVERIES=$(echo "$STATUS" | jq '[.data.order.deliveries[] | select(.status == "issued")] | length')
 
 echo "Провайдер: $PROVIDER"
 echo "Успешных выдач: $DELIVERIES"

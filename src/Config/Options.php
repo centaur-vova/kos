@@ -13,7 +13,6 @@ final readonly class Options
         public string $serverHost,
         public int $serverPort,
         public int $workerNum,
-        public int $shutdownTimeoutSec,
         public string $dbHost,
         public int $dbPort,
         public string $dbName,

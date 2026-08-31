@@ -52,7 +52,7 @@ final readonly class OrderController
     {
         $orderId = $params['id'] ?? null;
 
-        if (!$orderId) {
+        if (!$orderId || $orderId === 'null') {
             return ApiResponse::error('Order ID required', 400, 'order_id_required');
         }
 

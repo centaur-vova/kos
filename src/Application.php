@@ -28,9 +28,7 @@ class Application
         $this->router->post('/orders', [Controller\OrderController::class, 'create']);
         $this->router->get('/orders/{id}', [Controller\OrderController::class, 'show']);
         $this->router->post('/webhook/payment', [Controller\WebhookController::class, 'handle']);
-        $this->router->get('/health', function (Request $req, Response $res) {
-            $res->end(json_encode(['status' => 'ok']));
-        });
+        $this->router->get('/health', static fn () => ApiResponse::success(['status' => 'ok']));
     }
 
     public function handle(Request $request, Response $response): void

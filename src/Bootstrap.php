@@ -31,7 +31,6 @@ final readonly class Bootstrap
             serverHost: $loader->getString('SERVER_HOST', '0.0.0.0'),
             serverPort: $loader->getInt('SERVER_PORT', 8080),
             workerNum: $loader->getInt('WORKER_NUM', swoole_cpu_num() * 2),
-            shutdownTimeoutSec: $loader->getInt('SHUTDOWN_TIMEOUT_SEC', 30),
             dbHost: $loader->getString('DB_HOST', 'localhost'),
             dbPort: $loader->getInt('DB_PORT', 5432),
             dbName: $loader->getString('DB_NAME', 'game_shop'),

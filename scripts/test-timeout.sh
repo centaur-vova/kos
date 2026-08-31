@@ -22,7 +22,7 @@ ORDER=$(curl -s -X POST "$BASE_URL/orders" \
   -H "Content-Type: application/json" \
   -d '{"sku":"KEY-CS2-PRIME","user_id":"timeout_test"}')
 
-ORDER_CODE=$(echo "$ORDER" | jq -r '.order.order_code')
+ORDER_CODE=$(echo "$ORDER" | jq -r '.data.order.order_code')
 echo "Заказ создан: $ORDER_CODE"
 
 # Отправляем вебхук
@@ -42,8 +42,8 @@ echo "Статус заказа:"
 echo "$STATUS" | jq .
 
 # Проверяем количество выдач
-DELIVERIES=$(echo "$STATUS" | jq '.order.deliveries | length')
-CODES=$(echo "$STATUS" | jq '[.order.deliveries[] | select(.status == "issued")] | length')
+DELIVERIES=$(echo "$STATUS" | jq '.data.order.deliveries | length')
+CODES=$(echo "$STATUS" | jq '[.data.order.deliveries[] | select(.status == "issued")] | length')
 
 echo ""
 echo "Всего попыток: $DELIVERIES"

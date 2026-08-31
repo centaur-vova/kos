@@ -14,7 +14,7 @@ use App\Support\StdoutLogger;
 
 use function DI\autowire;
 
-class Container
+final class Container
 {
     private static \DI\Container $container;
 

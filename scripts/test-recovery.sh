@@ -22,8 +22,8 @@ ORDER=$(curl -s -X POST "$BASE_URL/orders" \
   -H "Content-Type: application/json" \
   -d '{"sku":"KEY-CS2-PRIME","user_id":"recovery_test"}')
 
-ORDER_CODE=$(echo "$ORDER" | jq -r '.order.order_code')
-ORDER_ID=$(echo "$ORDER" | jq -r '.order.id')
+ORDER_CODE=$(echo "$ORDER" | jq -r '.data.order.order_code')
+ORDER_ID=$(echo "$ORDER" | jq -r '.data.order.id')
 
 echo "Заказ создан: $ORDER_CODE"
 
@@ -42,7 +42,7 @@ echo "Заказ помечен как зависший"
 
 # Проверяем сверку до восстановления
 RECON=$(curl -s "$BASE_URL/reconciliation")
-PAID_NOT_DELIVERED=$(echo "$RECON" | jq --arg order_code "$ORDER_CODE" '.details.paid_not_delivered[] | select(.order_code == $order_code)' | wc -l)
+PAID_NOT_DELIVERED=$(echo "$RECON" | jq --arg order_code "$ORDER_CODE" '.data.details.paid_not_delivered[] | select(.order_code == $order_code)' | wc -l)
 
 if [ "$PAID_NOT_DELIVERED" -eq 0 ]; then
   echo "❌ Заказ не найден в сверке"
@@ -56,7 +56,7 @@ echo "Ждём восстановления (${SLEEP_TIME} сек)..."
 sleep $SLEEP_TIME
 
 # Проверяем статус
-STATUS=$(curl -s "$BASE_URL/orders/$ORDER_CODE" | jq -r '.order.status')
+STATUS=$(curl -s "$BASE_URL/orders/$ORDER_CODE" | jq -r '.data.order.status')
 
 echo "Статус после восстановления: $STATUS"
 

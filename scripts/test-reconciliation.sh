@@ -10,8 +10,8 @@ ORDER=$(curl -s -X POST "$BASE_URL/orders" \
   -H "Content-Type: application/json" \
   -d '{"sku":"KEY-CS2-PRIME","user_id":"recon_test"}')
 
-ORDER_CODE=$(echo "$ORDER" | jq -r '.order.order_code')
-ORDER_ID=$(echo "$ORDER" | jq -r '.order.id')
+ORDER_CODE=$(echo "$ORDER" | jq -r '.data.order.order_code')
+ORDER_ID=$(echo "$ORDER" | jq -r '.data.order.id')
 
 echo "Заказ: $ORDER_CODE"
 
@@ -29,7 +29,7 @@ echo "Сверка:"
 curl -s "$BASE_URL/reconciliation" | jq .
 
 # Проверяем, что заказ в списке
-FOUND=$(curl -s "$BASE_URL/reconciliation" | jq --arg order_code "$ORDER_CODE" '.details.paid_not_delivered[] | select(.order_code == $order_code)' | wc -l)
+FOUND=$(curl -s "$BASE_URL/reconciliation" | jq --arg order_code "$ORDER_CODE" '.data.details.paid_not_delivered[] | select(.order_code == $order_code)' | wc -l)
 
 if [ "$FOUND" -gt 0 ]; then
   echo "✅ ТЕСТ ПРОЙДЕН: зависший заказ найден"
