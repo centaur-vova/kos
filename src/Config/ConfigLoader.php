@@ -6,13 +6,13 @@ namespace App\Config;
 
 use Dotenv\Dotenv;
 
-class ConfigLoader
+final readonly class ConfigLoader
 {
     /**
      * @param array<string, mixed> $repository
      */
     public function __construct(
-        private readonly array $repository,
+        private array $repository,
     ) {
     }
 
