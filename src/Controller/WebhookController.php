@@ -9,7 +9,7 @@ use Swoole\Http\Response;
 use App\Service\PaymentService;
 use Psr\Log\LoggerInterface;
 
-class WebhookController
+final readonly class WebhookController
 {
     public function __construct(
         private PaymentService $paymentService,
@@ -19,9 +19,10 @@ class WebhookController
 
     public function handle(Request $request, Response $response, array $params): void
     {
-        $body = json_decode($request->getContent(), true);
+        $content = $request->getContent();
+        $body = $content ? json_decode($content, true) : null;
 
-        if (!$this->validateWebhook($body)) {
+        if (!is_array($body) || !$this->validateWebhook($body)) {
             $response->status(400);
             $response->end(json_encode([
                 'status' => 'error',
@@ -34,15 +35,15 @@ class WebhookController
             $result = $this->paymentService->processWebhook($body);
             $response->end(json_encode($result));
         } catch (\Throwable $e) {
-            $this->logger->info("Webhook error", [
-                "error" => $e->getMessage(),
-                "trace" => $e->getTraceAsString(),
+            $this->logger->error('Webhook error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             $response->status(500);
             $response->end(json_encode([
                 'status' => 'error',
-                'message' => $e->getMessage(),
+                'message' => 'Internal error',
             ]));
         }
     }

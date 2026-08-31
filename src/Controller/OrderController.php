@@ -6,19 +6,30 @@ namespace App\Controller;
 
 use Swoole\Http\Request;
 use Swoole\Http\Response;
-use App\Database;
 use App\Service\OrderService;
+use Psr\Log\LoggerInterface;
 
-class OrderController
+final readonly class OrderController
 {
     public function __construct(
-        private OrderService $orderService
+        private OrderService $orderService,
+        private LoggerInterface $logger,
     ) {
     }
 
     public function create(Request $request, Response $response, array $params): void
     {
-        $body = json_decode($request->getContent(), true);
+        $content = $request->getContent();
+        $body = $content ? json_decode($content, true) : null;
+
+        if (!is_array($body)) {
+            $response->status(400);
+            $response->end(json_encode([
+                'status' => 'error',
+                'message' => 'Invalid JSON payload',
+            ]));
+            return;
+        }
 
         $sku = $body['sku'] ?? null;
         $userId = $body['user_id'] ?? null;
@@ -33,6 +44,7 @@ class OrderController
         }
 
         try {
+            $this->logger->info('Creating order', ['sku' => $sku, 'user_id' => $userId]);
             $order = $this->orderService->create($sku, $userId);
 
             $response->status(201);
@@ -42,6 +54,10 @@ class OrderController
             ]));
 
         } catch (\RuntimeException $e) {
+            $this->logger->error('Order creation failed', [
+                'error' => $e->getMessage(),
+            ]);
+
             $response->status(400);
             $response->end(json_encode([
                 'status' => 'error',

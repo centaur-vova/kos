@@ -27,19 +27,20 @@ final readonly class RecoveryService
 
         $stmt = $pdo->prepare(
             "SELECT id, order_code FROM orders
-             WHERE status NOT IN (:delivered, :payment_failed)
+             WHERE status IN (:paid, :delivering, :out_of_stock, :delivery_failed)
              AND paid_at IS NOT NULL
              AND updated_at < NOW() - INTERVAL '1 minute' * :stuck_after_min
              ORDER BY created_at
              LIMIT :batch_size"
         );
         $stmt->execute([
-            'delivered' => OrderStatus::Delivered->value,
-            'payment_failed' => OrderStatus::PaymentFailed->value,
+            'paid' => OrderStatus::Paid->value,
+            'delivering' => OrderStatus::Delivering->value,
+            'out_of_stock' => OrderStatus::OutOfStock->value,
+            'delivery_failed' => OrderStatus::DeliveryFailed->value,
             'stuck_after_min' => $this->options->recoveryStuckAfterMin,
             'batch_size' => $this->options->recoveryBatchSize,
         ]);
-
         $stuckOrders = $stmt->fetchAll();
 
         $this->logger->info('Found stuck orders', ['count' => count($stuckOrders)]);

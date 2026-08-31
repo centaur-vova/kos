@@ -4,17 +4,19 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Config\Options;
 use App\Database;
 use App\Enum\OrderStatus;
 use Psr\Log\LoggerInterface;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 
-class ReconciliationController
+final readonly class ReconciliationController
 {
     public function __construct(
         private Database $db,
         private LoggerInterface $logger,
+        private Options $options,
     ) {
     }
 
@@ -27,18 +29,22 @@ class ReconciliationController
         // Оплачен, но не выдан
         $stmt = $pdo->prepare(
             "SELECT * FROM orders
-             WHERE status NOT IN (:delivered, :payment_failed)
+             WHERE status IN (:created, :paid, :delivering, :delivery_failed, :out_of_stock)
              AND paid_at IS NOT NULL
-             AND updated_at < NOW() - INTERVAL '5 minutes'
+             AND updated_at < NOW() - INTERVAL '1 minute' * :stuck_after_min
              ORDER BY created_at"
         );
         $stmt->execute([
-            'delivered' => OrderStatus::Delivered->value,
-            'payment_failed' => OrderStatus::PaymentFailed->value,
+            'created' => OrderStatus::Created->value,
+            'paid' => OrderStatus::Paid->value,
+            'delivering' => OrderStatus::Delivering->value,
+            'delivery_failed' => OrderStatus::DeliveryFailed->value,
+            'out_of_stock' => OrderStatus::OutOfStock->value,
+            'stuck_after_min' => $this->options->recoveryStuckAfterMin,
         ]);
         $paidNotDelivered = $stmt->fetchAll();
 
-        // Выдан, но не оплачен (подозрительно)
+        // Выдан, но не оплачен
         $stmt = $pdo->prepare(
             "SELECT * FROM orders
              WHERE status = :delivered
