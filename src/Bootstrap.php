@@ -16,6 +16,7 @@ final readonly class Bootstrap
 
         // Провайдеры
         $providersData = $loader->getArray('PROVIDERS_CONFIG', [
+            // Дефолтный конфиг если не задано в .env
             'A' => ['host' => 'provider-a', 'port' => 8000, 'timeout_ms' => 5000],
             'B' => ['host' => 'provider-b', 'port' => 8000, 'timeout_ms' => 5000],
         ]);
@@ -41,6 +42,7 @@ final readonly class Bootstrap
             deliveryRetryDelaysMs: $loader->getArray('DELIVERY_RETRY_DELAYS_MS', [1000, 3000, 5000]),
             deliveryLockTtlSec: $loader->getInt('DELIVERY_LOCK_TTL_SEC', 30),
             logLevel: $loader->getString('LOG_LEVEL', 'info'),
+            recoveryIntervalSec: $loader->getInt('RECOVERY_INTERVAL_SEC', 60),
         );
     }
 }

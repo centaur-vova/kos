@@ -9,6 +9,7 @@ use App\Application;
 use App\Bootstrap;
 use App\Config;
 use App\Container;
+use App\Service\RecoveryService;
 use Psr\Log\LoggerInterface;
 
 error_reporting(E_ALL);
@@ -45,6 +46,16 @@ $server->set([
 
 $server->on('start', function (Server $server) use ($logger) {
     $logger->info("Server started at http://{$server->host}:{$server->port}");
+});
+
+$server->on('start', function (Server $server) use ($logger, $options) {
+    $logger->info("Server started at http://{$server->host}:{$server->port}");
+
+    Swoole\Timer::tick($options->recoveryIntervalSec * 1000, function () {
+        /** @var RecoveryService $recoveryService */
+        $recoveryService = Container::get(RecoveryService::class);
+        $recoveryService->recoverStuckOrders();
+    });
 });
 
 $server->on('request', function (Request $request, Response $response) use ($app, $logger) {

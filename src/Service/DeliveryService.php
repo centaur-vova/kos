@@ -78,10 +78,12 @@ class DeliveryService
             return true;
 
         } catch (\PDOException $e) {
-            if ($e->getCode() === Database::UNIQUE_VIOLATION) {
+            if ($e->errorInfo[0] === Database::UNIQUE_VIOLATION) {
                 return false;
             }
             throw $e;
+        } catch (\Throwable $e) {
+            $this->logger->info("GOT ERROR ", [gettype($e)]);
         }
     }
 
@@ -198,9 +200,12 @@ class DeliveryService
     private function retryWithBackoff(string $orderId, string $requestId, string $provider): void
     {
         for ($attempt = 0; $attempt < $this->options->deliveryMaxRetries; $attempt++) {
-            $delayMs = $this->options->deliveryRetryDelaysMs[$attempt]
-                ?? end($this->options->deliveryRetryDelaysMs);
+            $delays = $this->options->deliveryRetryDelaysMs;
+            if (empty($delays)) {
+                throw new \RuntimeException('DELIVERY_RETRY_DELAYS_MS must not be empty');
+            }
 
+            $delayMs = $delays[$attempt] ?? $delays[array_key_last($delays)];
             Coroutine::sleep($delayMs / 1000);
 
             try {

@@ -24,6 +24,7 @@ final readonly class Options
         public array $deliveryRetryDelaysMs,
         public int $deliveryLockTtlSec,
         public string $logLevel,
+        public readonly int $recoveryIntervalSec,
     ) {
     }
 
