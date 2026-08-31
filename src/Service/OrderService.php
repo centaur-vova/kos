@@ -70,18 +70,23 @@ final readonly class OrderService
     {
         $pdo = $this->db->getConnection();
 
-        // Пробуем найти по order_code
-        $stmt = $pdo->prepare(
-            "SELECT * FROM orders WHERE order_code = ? OR id::text = ?"
-        );
-        $stmt->execute([$orderId, $orderId]);
+        // Если начинается с 'ord_' — ищем по order_code
+        if (str_starts_with($orderId, 'ord_')) {
+            $stmt = $pdo->prepare("SELECT * FROM orders WHERE order_code = ?");
+            $stmt->execute([$orderId]);
+        } else {
+            // Иначе — по id (UUID)
+            $stmt = $pdo->prepare("SELECT * FROM orders WHERE id = ?");
+            $stmt->execute([$orderId]);
+        }
+
         $order = $stmt->fetch();
 
         if (!$order) {
             return null;
         }
 
-        // Добавляем информации о выдаче
+        // Добавляем информацию о выдаче
         $stmt = $pdo->prepare(
             "SELECT * FROM deliveries WHERE order_id = ? ORDER BY created_at"
         );
