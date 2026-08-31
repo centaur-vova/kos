@@ -8,7 +8,7 @@ use App\Config\Options;
 use App\Storage\StorageInterface;
 use Psr\Log\LoggerInterface;
 
-class LockService
+final readonly class LockService
 {
     public function __construct(
         private StorageInterface $storage,

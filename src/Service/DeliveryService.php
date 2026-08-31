@@ -13,7 +13,7 @@ use App\Enum\DeliveryStatus;
 use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 
-final class DeliveryService
+final readonly class DeliveryService
 {
     public function __construct(
         private Database $db,
@@ -76,7 +76,7 @@ final class DeliveryService
             return true;
 
         } catch (\PDOException $e) {
-            if ($e->errorInfo[0] === Database::UNIQUE_VIOLATION) {
+            if (($e->errorInfo[0] ?? null) === Database::UNIQUE_VIOLATION) {
                 return false;
             }
             throw $e;

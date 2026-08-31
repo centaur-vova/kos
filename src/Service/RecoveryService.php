@@ -9,7 +9,7 @@ use App\Database;
 use App\Enum\OrderStatus;
 use Psr\Log\LoggerInterface;
 
-class RecoveryService
+final readonly class RecoveryService
 {
     public function __construct(
         private Database $db,

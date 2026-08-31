@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Config\Options;
 use App\Database;
 use App\Enum\OrderStatus;
+use App\Enum\PaymentProcessingStatus;
 use App\Storage\StorageInterface;
+use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 
-class PaymentService
+final readonly class PaymentService
 {
     public function __construct(
         private Database $db,
         private DeliveryService $deliveryService,
         private StorageInterface $storage,
+        private LoggerInterface $logger,
+        private Options $options,
     ) {
     }
 
@@ -23,22 +28,25 @@ class PaymentService
         $eventId = $payload['event_id'];
         $orderCode = $payload['order_id'];
 
-        // Идемпотентность через Redis
+        $this->logger->info('Processing webhook', [
+            'event_id' => $eventId,
+            'order_code' => $orderCode,
+        ]);
+
         $eventKey = "payment:event:{$eventId}";
 
         if ($this->storage->has($eventKey)) {
-            return ['status' => 'already_processed'];
+            $this->logger->info('Webhook already processed', ['event_id' => $eventId]);
+            return ['status' => PaymentProcessingStatus::AlreadyProcessed->value];
         }
 
-        // Помечаем как обрабатываемый
-        $this->storage->set($eventKey, 'processing', 86400);
+        $this->storage->set($eventKey, 'processing', $this->options->paymentIdempotencyTtlSec);
 
         $result = $this->db->transaction(function ($pdo) use ($payload, $eventId, $orderCode) {
             return $this->processInTransaction($pdo, $payload, $eventId, $orderCode);
         });
 
-        // Запускаем выдачу после завершения транзакции
-        if ($result['status'] === 'processed' && $payload['status'] === 'paid') {
+        if ($result['status'] === PaymentProcessingStatus::Processed->value && $payload['status'] === 'paid') {
             Coroutine::create(function () use ($orderCode) {
                 $this->deliveryService->deliverByOrderCode($orderCode);
             });
@@ -49,7 +57,6 @@ class PaymentService
 
     private function processInTransaction(\PDO $pdo, array $payload, string $eventId, string $orderCode): array
     {
-        // Проверяем идемпотентность в БД
         $stmt = $pdo->prepare(
             "SELECT id, status FROM payments WHERE event_id = ?"
         );
@@ -58,12 +65,11 @@ class PaymentService
 
         if ($existingPayment) {
             return [
-                'status' => 'already_processed',
+                'status' => PaymentProcessingStatus::AlreadyProcessed->value,
                 'payment_status' => $existingPayment['status'],
             ];
         }
 
-        // Находим заказ
         $stmt = $pdo->prepare(
             "SELECT * FROM orders WHERE order_code = ?"
         );
@@ -82,12 +88,11 @@ class PaymentService
             ]);
 
             return [
-                'status' => 'orphan_payment',
+                'status' => PaymentProcessingStatus::OrphanPayment->value,
                 'message' => 'Order not found, payment saved',
             ];
         }
 
-        // Проверяем статус заказа
         if (OrderStatus::tryFrom($order['status']) === OrderStatus::Delivered) {
             $stmt = $pdo->prepare(
                 "INSERT INTO payments (event_id, order_id, status, amount, currency)
@@ -101,7 +106,7 @@ class PaymentService
             ]);
 
             return [
-                'status' => 'duplicate_after_delivery',
+                'status' => PaymentProcessingStatus::DuplicateAfterDelivery->value,
             ];
         }
 
@@ -118,11 +123,10 @@ class PaymentService
             ]);
 
             return [
-                'status' => 'late_payment_after_failure',
+                'status' => PaymentProcessingStatus::LatePaymentAfterFailure->value,
             ];
         }
 
-        // Сохраняем платёж
         try {
             $stmt = $pdo->prepare(
                 "INSERT INTO payments (event_id, order_id, status, amount, currency)
@@ -136,15 +140,14 @@ class PaymentService
                 $payload['currency'] ?? 'RUB',
             ]);
         } catch (\PDOException $e) {
-            if ($e->getCode() === Database::UNIQUE_VIOLATION) {
+            if (($e->errorInfo[0] ?? null) === Database::UNIQUE_VIOLATION) {
                 return [
-                    'status' => 'already_processed_race',
+                    'status' => PaymentProcessingStatus::AlreadyProcessedRace->value,
                 ];
             }
             throw $e;
         }
 
-        // Обновляем статус заказа
         if ($payload['status'] === 'paid') {
             $stmt = $pdo->prepare(
                 "UPDATE orders
@@ -163,13 +166,13 @@ class PaymentService
 
             if ($stmt->rowCount() === 1) {
                 return [
-                    'status' => 'processed',
+                    'status' => PaymentProcessingStatus::Processed->value,
                     'delivery' => 'pending',
                 ];
             }
 
             return [
-                'status' => 'processed_by_other',
+                'status' => PaymentProcessingStatus::ProcessedByOther->value,
             ];
 
         } elseif ($payload['status'] === 'failed') {
@@ -188,12 +191,12 @@ class PaymentService
             ]);
 
             return [
-                'status' => 'payment_failed',
+                'status' => PaymentProcessingStatus::Processed->value,
             ];
         }
 
         return [
-            'status' => 'unknown_payment_status',
+            'status' => PaymentProcessingStatus::UnknownStatus->value,
         ];
     }
 }

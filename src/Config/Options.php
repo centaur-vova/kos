@@ -27,6 +27,7 @@ final readonly class Options
         public int $recoveryIntervalSec,
         public int $recoveryStuckAfterMin,
         public int $recoveryBatchSize,
+        public int $paymentIdempotencyTtlSec,
     ) {
     }
 

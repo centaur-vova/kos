@@ -9,7 +9,7 @@ use App\Exception\Provider\ProviderTimeoutException;
 use App\Config\Options;
 use Swoole\Coroutine\Http\Client;
 
-class ProviderClient
+final readonly class ProviderClient
 {
     public function __construct(
         private Options $options,
@@ -45,7 +45,10 @@ class ProviderClient
         if ($client->errCode !== 0) {
             $this->closeClient($client);
 
-            if ($client->errCode === SOCKET_ETIMEDOUT || $client->errCode === SOCKET_ECONNRESET) {
+            if (in_array($client->errCode, [
+                SWOOLE_ERROR_CO_TIMEDOUT,
+                SOCKET_ETIMEDOUT,
+            ], true)) {
                 throw new ProviderTimeoutException(
                     "Provider {$provider} timeout (err: {$client->errCode})"
                 );
@@ -61,7 +64,7 @@ class ProviderClient
 
         $this->closeClient($client);
 
-        if ($statusCode >= 500) {
+        if ($statusCode < 0 || $statusCode >= 500) {
             throw new ProviderException("Provider {$provider} error: HTTP {$statusCode}");
         }
 
@@ -78,7 +81,7 @@ class ProviderClient
     {
         try {
             $client->close();
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             // Игнорируем ошибки закрытия
         }
     }

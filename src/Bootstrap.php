@@ -45,6 +45,7 @@ final readonly class Bootstrap
             recoveryIntervalSec: $loader->getInt('RECOVERY_INTERVAL_SEC', 60),
             recoveryStuckAfterMin: $loader->getInt('RECOVERY_STUCK_AFTER_MIN', 5),
             recoveryBatchSize: $loader->getInt('RECOVERY_BATCH_SIZE', 10),
+            paymentIdempotencyTtlSec: $loader->getInt('PAYMENT_IDEMPOTENCY_TTL_SEC', 86400),
         );
     }
 }
