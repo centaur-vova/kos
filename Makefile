@@ -1,4 +1,16 @@
-.PHONY: up down restart logs ps test test-race test-timeout test-fallback test-reconciliation reset-stock
+.PHONY: \
+	up \
+	down \
+	restart \
+	logs \
+	ps \
+	test \
+	test-race \
+	test-timeout \
+	test-fallback \
+	test-reconciliation \
+	reset-stock \
+	clean-orders
 
 # Запуск
 up:
@@ -46,3 +58,6 @@ test-fallback-scenario:
 
 reset-stock:
 	docker compose exec postgres psql -U app -d game_shop -c "UPDATE products SET stock = 1000, reserved = 0;"
+
+clean-orders:
+	docker compose exec postgres psql -U app -d game_shop -c "DELETE FROM deliveries; DELETE FROM payments; DELETE FROM orders; UPDATE products SET reserved = 0;"
