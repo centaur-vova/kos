@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Exception;
 
-class OrderNotFoundException extends DomainException
+final class OrderNotFoundException extends DomainException
 {
     public function __construct(string $orderCode)
     {

@@ -6,6 +6,7 @@ namespace App\Service;
 
 use App\Config\Options;
 use App\Database;
+use App\DTO\PaymentWebhook;
 use App\Enum\OrderStatus;
 use App\Enum\PaymentProcessingStatus;
 use App\Storage\StorageInterface;
@@ -23,10 +24,10 @@ final readonly class PaymentService
     ) {
     }
 
-    public function processWebhook(array $payload): array
+    public function processWebhook(PaymentWebhook $webhook): array
     {
-        $eventId = $payload['event_id'];
-        $orderCode = $payload['order_id'];
+        $eventId = $webhook->eventId;
+        $orderCode = $webhook->orderCode;
 
         $this->logger->info('Processing webhook', [
             'event_id' => $eventId,
@@ -42,11 +43,11 @@ final readonly class PaymentService
 
         $this->storage->set($eventKey, 'processing', $this->options->paymentIdempotencyTtlSec);
 
-        $result = $this->db->transaction(function ($pdo) use ($payload, $eventId, $orderCode) {
-            return $this->processInTransaction($pdo, $payload, $eventId, $orderCode);
+        $result = $this->db->transaction(function ($pdo) use ($webhook, $eventId, $orderCode) {
+            return $this->processInTransaction($pdo, $webhook, $eventId, $orderCode);
         });
 
-        if ($result['status'] === PaymentProcessingStatus::Processed->value && $payload['status'] === 'paid') {
+        if ($result['status'] === PaymentProcessingStatus::Processed->value && $webhook->isPaid()) {
             Coroutine::create(function () use ($orderCode) {
                 $this->deliveryService->deliverByOrderCode($orderCode);
             });
@@ -55,7 +56,7 @@ final readonly class PaymentService
         return $result;
     }
 
-    private function processInTransaction(\PDO $pdo, array $payload, string $eventId, string $orderCode): array
+    private function processInTransaction(\PDO $pdo, PaymentWebhook $webhook, string $eventId, string $orderCode): array
     {
         $stmt = $pdo->prepare(
             "SELECT id, status FROM payments WHERE event_id = ?"
@@ -79,12 +80,12 @@ final readonly class PaymentService
         if (!$order) {
             $stmt = $pdo->prepare(
                 "INSERT INTO payments (event_id, status, amount, currency)
-                 VALUES (?, 'orphan', ?, ?)"
+             VALUES (?, 'orphan', ?, ?)"
             );
             $stmt->execute([
                 $eventId,
-                $payload['amount'],
-                $payload['currency'] ?? 'RUB',
+                $webhook->amount,
+                $webhook->currency,
             ]);
 
             return [
@@ -96,13 +97,13 @@ final readonly class PaymentService
         if (OrderStatus::tryFrom($order['status']) === OrderStatus::Delivered) {
             $stmt = $pdo->prepare(
                 "INSERT INTO payments (event_id, order_id, status, amount, currency)
-                 VALUES (?, ?, 'duplicate_after_delivery', ?, ?)"
+             VALUES (?, ?, 'duplicate_after_delivery', ?, ?)"
             );
             $stmt->execute([
                 $eventId,
                 $order['id'],
-                $payload['amount'],
-                $payload['currency'] ?? 'RUB',
+                $webhook->amount,
+                $webhook->currency,
             ]);
 
             return [
@@ -113,13 +114,13 @@ final readonly class PaymentService
         if (OrderStatus::tryFrom($order['status']) === OrderStatus::PaymentFailed) {
             $stmt = $pdo->prepare(
                 "INSERT INTO payments (event_id, order_id, status, amount, currency)
-                 VALUES (?, ?, 'late_payment', ?, ?)"
+             VALUES (?, ?, 'late_payment', ?, ?)"
             );
             $stmt->execute([
                 $eventId,
                 $order['id'],
-                $payload['amount'],
-                $payload['currency'] ?? 'RUB',
+                $webhook->amount,
+                $webhook->currency,
             ]);
 
             return [
@@ -130,14 +131,14 @@ final readonly class PaymentService
         try {
             $stmt = $pdo->prepare(
                 "INSERT INTO payments (event_id, order_id, status, amount, currency)
-                 VALUES (?, ?, ?, ?, ?)"
+             VALUES (?, ?, ?, ?, ?)"
             );
             $stmt->execute([
                 $eventId,
                 $order['id'],
-                $payload['status'],
-                $payload['amount'],
-                $payload['currency'] ?? 'RUB',
+                $webhook->status,
+                $webhook->amount,
+                $webhook->currency,
             ]);
         } catch (\PDOException $e) {
             if (($e->errorInfo[0] ?? null) === Database::UNIQUE_VIOLATION) {
@@ -148,20 +149,22 @@ final readonly class PaymentService
             throw $e;
         }
 
-        if ($payload['status'] === 'paid') {
+        if ($webhook->isPaid()) {
             $stmt = $pdo->prepare(
                 "UPDATE orders
-                 SET status = :paid_status,
-                     paid_at = NOW(),
-                     updated_at = NOW(),
-                     version = version + 1
-                 WHERE id = :order_id
-                 AND status = :created_status"
+             SET status = :paid_status,
+                 paid_at = NOW(),
+                 updated_at = NOW(),
+                 version = version + 1
+             WHERE id = :order_id
+             AND status = :created_status
+             AND version = :current_version"
             );
             $stmt->execute([
                 'paid_status' => OrderStatus::Paid->value,
                 'order_id' => $order['id'],
                 'created_status' => OrderStatus::Created->value,
+                'current_version' => $order['version'],
             ]);
 
             if ($stmt->rowCount() === 1) {
@@ -175,23 +178,26 @@ final readonly class PaymentService
                 'status' => PaymentProcessingStatus::ProcessedByOther->value,
             ];
 
-        } elseif ($payload['status'] === 'failed') {
+        } elseif ($webhook->isFailed()) {
             $stmt = $pdo->prepare(
                 "UPDATE orders
                  SET status = :failed_status,
                      updated_at = NOW(),
                      version = version + 1
                  WHERE id = :order_id
-                 AND status = :created_status"
+                 AND status = :created_status
+                 AND version = :current_version"
             );
             $stmt->execute([
                 'failed_status' => OrderStatus::PaymentFailed->value,
                 'order_id' => $order['id'],
                 'created_status' => OrderStatus::Created->value,
+                'current_version' => $order['version'],
             ]);
 
             return [
                 'status' => PaymentProcessingStatus::Processed->value,
+                'payment_status' => 'failed',
             ];
         }
 

@@ -4,65 +4,59 @@ declare(strict_types=1);
 
 namespace App;
 
+use App\Http\ApiResponse;
 use Swoole\Http\Request;
-use Swoole\Http\Response;
-use App\Container;
 
-class Router
+final class Router
 {
+    private const METHOD_GET = 'GET';
+    private const METHOD_POST = 'POST';
+
     private array $routes = [];
 
     public function post(string $path, callable|array $handler): self
     {
-        $this->routes['POST'][$path] = $handler;
+        $this->routes[self::METHOD_POST][$path] = $handler;
         return $this;
     }
 
     public function get(string $path, callable|array $handler): self
     {
-        $this->routes['GET'][$path] = $handler;
+        $this->routes[self::METHOD_GET][$path] = $handler;
         return $this;
     }
 
-    public function dispatch(Request $request, Response $response): void
+    public function dispatch(Request $request): ApiResponse
     {
-        $method = $request->server['request_method'] ?? 'GET';
+        $method = $request->server['request_method'] ?? self::METHOD_GET;
         $uri = $request->server['request_uri'] ?? '/';
         $path = parse_url($uri, PHP_URL_PATH);
 
         // Точное совпадение
         if (isset($this->routes[$method][$path])) {
-            $this->callHandler($this->routes[$method][$path], $request, $response, []);
-            return;
+            return $this->callHandler($this->routes[$method][$path], $request, []);
         }
 
         // С параметрами
         foreach ($this->routes[$method] ?? [] as $routePath => $handler) {
             $params = $this->matchParams($routePath, $path);
             if ($params !== null) {
-                $this->callHandler($handler, $request, $response, $params);
-                return;
+                return $this->callHandler($handler, $request, $params);
             }
         }
 
-        $response->status(404);
-        $response->end(json_encode([
-            'status' => 'error',
-            'message' => 'Not Found',
-        ]));
+        return ApiResponse::error('Not Found', 404, 'not_found');
     }
 
-    private function callHandler(callable|array $handler, Request $request, Response $response, array $params): void
+    private function callHandler(callable|array $handler, Request $request, array $params): ApiResponse
     {
         if (is_array($handler) && count($handler) === 2) {
             [$controllerClass, $method] = $handler;
-
-            // Получаем контроллер из DI-контейнера
             $controller = Container::get($controllerClass);
-            $controller->$method($request, $response, $params);
-        } else {
-            $handler($request, $response, $params);
+            return $controller->$method($request, $params);
         }
+
+        return $handler($request, $params);
     }
 
     private function matchParams(string $routePath, string $uriPath): ?array

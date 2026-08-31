@@ -40,7 +40,7 @@ class StdoutLogger extends AbstractLogger
             $ms,
             strtoupper($levelString),
             $message,
-            $context ? json_encode($context, JSON_UNESCAPED_UNICODE) : ''
+            $context ? json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : ''
         );
 
         echo $output;

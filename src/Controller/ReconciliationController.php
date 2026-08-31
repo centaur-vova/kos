@@ -7,9 +7,9 @@ namespace App\Controller;
 use App\Config\Options;
 use App\Database;
 use App\Enum\OrderStatus;
+use App\Http\ApiResponse;
 use Psr\Log\LoggerInterface;
 use Swoole\Http\Request;
-use Swoole\Http\Response;
 
 final readonly class ReconciliationController
 {
@@ -20,7 +20,7 @@ final readonly class ReconciliationController
     ) {
     }
 
-    public function index(Request $request, Response $response, array $params): void
+    public function index(Request $request, array $params): ApiResponse
     {
         $this->logger->info('Reconciliation requested');
 
@@ -68,9 +68,7 @@ final readonly class ReconciliationController
         ]);
         $stuckDelivering = $stmt->fetchAll();
 
-        $response->end(json_encode([
-            'status' => 'ok',
-            'timestamp' => (new \DateTimeImmutable())->format('c'),
+        return ApiResponse::success([
             'summary' => [
                 'paid_not_delivered' => count($paidNotDelivered),
                 'delivered_not_paid' => count($deliveredNotPaid),
@@ -81,6 +79,6 @@ final readonly class ReconciliationController
                 'delivered_not_paid' => $deliveredNotPaid,
                 'stuck_delivering' => $stuckDelivering,
             ],
-        ], JSON_UNESCAPED_UNICODE));
+        ]);
     }
 }

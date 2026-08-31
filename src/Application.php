@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App;
 
 use App\Config\Options;
+use App\Http\ApiResponse;
+use Psr\Log\LoggerInterface;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 
@@ -14,8 +16,9 @@ class Application
 
     public function __construct(
         private readonly Options $options,
+        private readonly LoggerInterface $logger,
     ) {
-        $this->router = new Router();
+        $this->router = Container::get(Router::class);
         $this->registerRoutes();
     }
 
@@ -32,7 +35,27 @@ class Application
 
     public function handle(Request $request, Response $response): void
     {
-        $this->router->dispatch($request, $response);
+        try {
+            $apiResponse = $this->router->dispatch($request);
+            $this->sendResponse($apiResponse, $response);
+        } catch (\Throwable $e) {
+            $this->logger->error('Application exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            $this->sendResponse(
+                ApiResponse::error('Internal Server Error', 500, 'internal_error'),
+                $response
+            );
+        }
+    }
+
+    private function sendResponse(ApiResponse $apiResponse, Response $response): void
+    {
+        $response->status($apiResponse->status);
+        $response->header('Content-Type', 'application/json');
+        $response->end(json_encode($apiResponse->payload, JSON_UNESCAPED_UNICODE));
     }
 
     public function getOptions(): Options

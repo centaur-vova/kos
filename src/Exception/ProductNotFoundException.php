@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Exception;
 
-class ProductNotFoundException extends DomainException
+final class ProductNotFoundException extends DomainException
 {
     public function __construct(string $sku)
     {

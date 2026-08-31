@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\DTO;
 
-class PaymentWebhook
+final readonly class PaymentWebhook
 {
     public function __construct(
         public readonly string $eventId,

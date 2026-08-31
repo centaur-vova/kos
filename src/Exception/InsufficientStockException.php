@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Exception;
 
-class InsufficientStockException extends DomainException
+final class InsufficientStockException extends DomainException
 {
     public function __construct(string $sku)
     {

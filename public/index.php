@@ -26,26 +26,22 @@ $options = Bootstrap::init(__DIR__ . '/..');
 // Инициализируем DI
 Container::init($options);
 
+// Сразу получаем логгер
+$logger = Container::get(LoggerInterface::class);
+
 // Создаём приложение
-$app = new Application($options);
+$app = new Application($options, $logger);
 
 $server = new Server(
     host: $options->serverHost,
     port: $options->serverPort,
 );
 
-
-$logger = Container::get(LoggerInterface::class);
-
 $server->set([
     'worker_num' => $options->workerNum,
     'max_request' => 100000,
     'log_level' => SWOOLE_LOG_WARNING,
 ]);
-
-$server->on('start', function (Server $server) use ($logger) {
-    $logger->info("Server started at http://{$server->host}:{$server->port}");
-});
 
 $server->on('start', function (Server $server) use ($logger, $options) {
     $logger->info("Server started at http://{$server->host}:{$server->port}");
@@ -57,20 +53,8 @@ $server->on('start', function (Server $server) use ($logger, $options) {
     });
 });
 
-$server->on('request', function (Request $request, Response $response) use ($app, $logger) {
-    try {
-        $app->handle($request, $response);
-    } catch (\Throwable $e) {
-        $response->status(500);
-        $response->end(json_encode([
-            'status' => 'error',
-            'message' => 'Internal Server Error',
-        ]));
-
-        $logger->info("Server error", [
-            'error' => (string) $e,
-        ]);
-    }
+$server->on('request', function (Request $request, Response $response) use ($app) {
+    $app->handle($request, $response);
 });
 
 $server->start();

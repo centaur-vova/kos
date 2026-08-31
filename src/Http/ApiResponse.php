@@ -4,17 +4,21 @@ declare(strict_types=1);
 
 namespace App\Http;
 
-use Swoole\Http\Response;
-
-class ApiResponse
+final readonly class ApiResponse
 {
-    public static function success(Response $response, mixed $data = null, int $status = 200): void
-    {
-        $response->status($status);
-        $response->header('Content-Type', 'application/json');
+    private const STATUS_OK = 'ok';
+    private const STATUS_ERROR = 'error';
 
+    public function __construct(
+        public int $status,
+        public array $payload,
+    ) {
+    }
+
+    public static function success(mixed $data = null, int $status = 200): self
+    {
         $payload = [
-            'status' => 'ok',
+            'status' => self::STATUS_OK,
             'timestamp' => (new \DateTimeImmutable())->format('c'),
         ];
 
@@ -22,23 +26,18 @@ class ApiResponse
             $payload['data'] = $data;
         }
 
-        $response->end(json_encode($payload, JSON_UNESCAPED_UNICODE));
+        return new self($status, $payload);
     }
 
-    public static function error(Response $response, string $message, int $status = 400, string $code = null): void
+    public static function error(string $message, int $status = 400, ?string $code = null): self
     {
-        $response->status($status);
-        $response->header('Content-Type', 'application/json');
-
-        $payload = [
-            'status' => 'error',
+        return new self($status, [
+            'status' => self::STATUS_ERROR,
             'error' => [
                 'code' => $code ?? 'bad_request',
                 'message' => $message,
             ],
             'timestamp' => (new \DateTimeImmutable())->format('c'),
-        ];
-
-        $response->end(json_encode($payload, JSON_UNESCAPED_UNICODE));
+        ]);
     }
 }

@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\PaymentWebhook;
+use App\Http\ApiResponse;
 use Swoole\Http\Request;
-use Swoole\Http\Response;
 use App\Service\PaymentService;
 use Psr\Log\LoggerInterface;
 
@@ -17,44 +18,37 @@ final readonly class WebhookController
     ) {
     }
 
-    public function handle(Request $request, Response $response, array $params): void
+    public function handle(Request $request, array $params): ApiResponse
     {
         $content = $request->getContent();
         $body = $content ? json_decode($content, true) : null;
 
-        if (!is_array($body) || !$this->validateWebhook($body)) {
-            $response->status(400);
-            $response->end(json_encode([
-                'status' => 'error',
-                'message' => 'Invalid webhook payload',
-            ]));
-            return;
+        if (!is_array($body)) {
+            return ApiResponse::error('Invalid JSON payload', 400, 'invalid_json');
         }
 
         try {
-            $result = $this->paymentService->processWebhook($body);
-            $response->end(json_encode($result));
+            $webhook = PaymentWebhook::fromArray($body);
+
+            if (!$this->validateWebhook($webhook)) {
+                return ApiResponse::error('Invalid webhook payload', 400, 'invalid_webhook');
+            }
+
+            $result = $this->paymentService->processWebhook($webhook);
+            return ApiResponse::success($result);
         } catch (\Throwable $e) {
             $this->logger->error('Webhook error', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
-
-            $response->status(500);
-            $response->end(json_encode([
-                'status' => 'error',
-                'message' => 'Internal error',
-            ]));
+            return ApiResponse::error('Internal error', 500, 'internal_error');
         }
     }
 
-    private function validateWebhook(array $body): bool
+    private function validateWebhook(PaymentWebhook $webhook): bool
     {
-        return isset(
-            $body['event_id'],
-            $body['order_id'],
-            $body['status'],
-            $body['amount']
-        );
+        return !empty($webhook->eventId)
+            && !empty($webhook->orderCode)
+            && !empty($webhook->status)
+            && $webhook->amount > 0;
     }
 }
