@@ -196,7 +196,16 @@ final class DeliveryService
 
     private function retryWithBackoff(string $orderId, string $requestId, string $provider): void
     {
+        $this->logger->info('retryWithBackoff', [
+            'order_id' => $orderId,
+            'request_id' => $requestId,
+            'provider' => $provider,
+            'max_retries' => $this->options->deliveryMaxRetries,
+        ]);
+
         for ($attempt = 0; $attempt < $this->options->deliveryMaxRetries; $attempt++) {
+            $this->logger->info('retry attempt', ['attempt' => $attempt]);
+
             $delays = $this->options->deliveryRetryDelaysMs;
             if (empty($delays)) {
                 throw new \RuntimeException('DELIVERY_RETRY_DELAYS_MS must not be empty');
@@ -215,9 +224,18 @@ final class DeliveryService
                     provider: $provider,
                 );
 
+                $this->logger->info('Retry result', [
+                    'result' => $result,
+                ]);
+
                 if ($result['status'] === 'ok') {
+                    $this->logger->info('Saving delivery result', ['code' => $result['code']]);
                     $this->saveDeliveryResult($orderId, $requestId, $provider, $result['code']);
+
+                    $this->logger->info('Completing order');
                     $this->completeOrder($orderId, $provider, $requestId, $result['code']);
+
+                    $this->logger->info('Retry successful');
                     return;
                 }
 

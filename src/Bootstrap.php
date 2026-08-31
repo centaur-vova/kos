@@ -43,6 +43,8 @@ final readonly class Bootstrap
             deliveryLockTtlSec: $loader->getInt('DELIVERY_LOCK_TTL_SEC', 30),
             logLevel: $loader->getString('LOG_LEVEL', 'info'),
             recoveryIntervalSec: $loader->getInt('RECOVERY_INTERVAL_SEC', 60),
+            recoveryStuckAfterMin: $loader->getInt('RECOVERY_STUCK_AFTER_MIN', 5),
+            recoveryBatchSize: $loader->getInt('RECOVERY_BATCH_SIZE', 10),
         );
     }
 }

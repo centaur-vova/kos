@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Config\Options;
 use App\Database;
 use App\Enum\OrderStatus;
 use Psr\Log\LoggerInterface;
@@ -13,6 +14,7 @@ class RecoveryService
     public function __construct(
         private Database $db,
         private DeliveryService $deliveryService,
+        private Options $options,
         private LoggerInterface $logger,
     ) {
     }
@@ -23,18 +25,19 @@ class RecoveryService
 
         $pdo = $this->db->getConnection();
 
-        // Находим зависшие заказы
         $stmt = $pdo->prepare(
             "SELECT id, order_code FROM orders
              WHERE status NOT IN (:delivered, :payment_failed)
              AND paid_at IS NOT NULL
-             AND updated_at < NOW() - INTERVAL '5 minutes'
+             AND updated_at < NOW() - INTERVAL '1 minute' * :stuck_after_min
              ORDER BY created_at
-             LIMIT 10"
+             LIMIT :batch_size"
         );
         $stmt->execute([
             'delivered' => OrderStatus::Delivered->value,
             'payment_failed' => OrderStatus::PaymentFailed->value,
+            'stuck_after_min' => $this->options->recoveryStuckAfterMin,
+            'batch_size' => $this->options->recoveryBatchSize,
         ]);
 
         $stuckOrders = $stmt->fetchAll();
@@ -47,7 +50,6 @@ class RecoveryService
                 'order_code' => $order['order_code'],
             ]);
 
-            // Перезапускаем выдачу
             $this->deliveryService->deliverByOrderCode($order['order_code']);
         }
 

@@ -8,6 +8,15 @@ BASE_URL="http://localhost:8080"
 
 echo "=== Тест: восстановление зависшего заказа ==="
 
+# Загружаем настройки из .env
+RECOVERY_INTERVAL=$(grep RECOVERY_INTERVAL_SEC .env | cut -d '=' -f 2)
+if [ -z "$RECOVERY_INTERVAL" ]; then
+  RECOVERY_INTERVAL=60
+fi
+
+# Интервал + запас
+SLEEP_TIME=$((RECOVERY_INTERVAL + 10))
+
 # Создаём заказ
 ORDER=$(curl -s -X POST "$BASE_URL/orders" \
   -H "Content-Type: application/json" \
@@ -42,9 +51,9 @@ fi
 
 echo "Заказ найден в сверке"
 
-# Ждём фоновую задачу (RECOVERY_INTERVAL_SEC + запас)
-echo "Ждём восстановления..."
-sleep 15
+# Ждём фоновую задачу
+echo "Ждём восстановления (${SLEEP_TIME} сек)..."
+sleep $SLEEP_TIME
 
 # Проверяем статус
 STATUS=$(curl -s "$BASE_URL/orders/$ORDER_CODE" | jq -r '.order.status')

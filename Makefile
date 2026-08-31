@@ -34,10 +34,15 @@ ps:
 test: test-race test-timeout test-fallback test-reconciliation
 
 test-race:
+	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=0 docker compose up -d provider-a
+	MOCK_ERROR_RATE_B=0 MOCK_TIMEOUT_RATE_B=0 docker compose up -d provider-b
 	./scripts/test-race.sh
+	docker compose up -d provider-a provider-b
 
 test-timeout:
+	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=100 docker compose up -d provider-a
 	./scripts/test-timeout.sh
+	docker compose up -d provider-a
 
 test-fallback:
 	MOCK_ERROR_RATE_A=100 MOCK_TIMEOUT_RATE_A=0 docker compose up -d provider-a

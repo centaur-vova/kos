@@ -25,6 +25,8 @@ final readonly class Options
         public int $deliveryLockTtlSec,
         public string $logLevel,
         public int $recoveryIntervalSec,
+        public int $recoveryStuckAfterMin,
+        public int $recoveryBatchSize,
     ) {
     }
 

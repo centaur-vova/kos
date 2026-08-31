@@ -18,7 +18,7 @@ echo "Заказ создан: $ORDER_CODE"
 
 # Отправляем 50 параллельных вебхуков
 echo "Отправляем 50 вебхуков..."
-for i in $(seq 1 5); do # TODO
+for i in $(seq 1 50); do
   curl -s -X POST "$BASE_URL/webhook/payment" \
     -H "Content-Type: application/json" \
     -d "{\"event_id\":\"evt_race_${i}_$(date +%s)\",\"order_id\":\"$ORDER_CODE\",\"status\":\"paid\",\"amount\":1290}" &
@@ -27,8 +27,15 @@ wait
 
 echo "Все вебхуки отправлены"
 
-# Ждём обработки
-sleep 3
+# Ждём до 30 секунд, пока заказ не доставлен
+for i in $(seq 1 30); do
+  STATUS=$(curl -s "$BASE_URL/orders/$ORDER_CODE" | jq -r '.order.status')
+  if [ "$STATUS" = "delivered" ]; then
+    echo "Заказ доставлен (через ${i} сек)"
+    break
+  fi
+  sleep 1
+done
 
 # Проверяем статус
 STATUS=$(curl -s "$BASE_URL/orders/$ORDER_CODE")

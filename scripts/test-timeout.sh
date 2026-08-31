@@ -8,6 +8,15 @@ BASE_URL="http://localhost:8080"
 
 echo "=== Тест: таймаут провайдера ==="
 
+# Загружаем настройки из .env
+TIMEOUT_DURATION=$(grep MOCK_TIMEOUT_DURATION_SEC_A .env | cut -d '=' -f 2)
+if [ -z "$TIMEOUT_DURATION" ]; then
+  TIMEOUT_DURATION=7
+fi
+
+# Таймаут + первый ретрай + запас
+SLEEP_TIME=$((TIMEOUT_DURATION + 10))
+
 # Создаём заказ
 ORDER=$(curl -s -X POST "$BASE_URL/orders" \
   -H "Content-Type: application/json" \
@@ -24,7 +33,8 @@ RESULT=$(curl -s -X POST "$BASE_URL/webhook/payment" \
 echo "Вебхук: $RESULT"
 
 # Ждём обработки
-sleep 5
+echo "Ждём обработки (${SLEEP_TIME} сек)..."
+sleep $SLEEP_TIME
 
 # Проверяем статус
 STATUS=$(curl -s "$BASE_URL/orders/$ORDER_CODE")
