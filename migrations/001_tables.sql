@@ -1,4 +1,4 @@
--- migrations/001_init.sql
+-- Таблицы
 CREATE TABLE IF NOT EXISTS products (
     sku TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -62,12 +62,3 @@ CREATE TABLE IF NOT EXISTS keys_pool (
     reserved_at TIMESTAMPTZ,
     issued_at TIMESTAMPTZ
 );
-
-CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)
-    WHERE status NOT IN ('delivered', 'payment_failed');
-
-CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_payments_event ON payments(event_id);
-CREATE INDEX IF NOT EXISTS idx_deliveries_request ON deliveries(request_id);
-CREATE INDEX IF NOT EXISTS idx_keys_pool_available ON keys_pool(status)
-    WHERE status = 'available';
