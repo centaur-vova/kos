@@ -1,0 +1,36 @@
+# Composer
+/vendor/
+composer.phar
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+/logs/
+*.log
+
+# Cache
+/cache/
+*.cache
+
+# Docker
+docker-compose.override.yml
+
+# Tests
+.phpunit.result.cache
+/coverage/
+
+# Swoole
+*.swoole

@@ -1,0 +1,29 @@
+{
+    "name": "game-shop/core",
+    "description": "Game shop backend core - atomic delivery",
+    "type": "project",
+    "require": {
+        "php": "^8.4",
+        "ext-swoole": "*",
+        "ext-pdo": "*",
+        "ext-pdo_pgsql": "*",
+        "vlucas/phpdotenv": "^5.7",
+        "php-di/php-di": "^7.1",
+        "psr/log": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0",
+        "swoole/ide-helper": "^6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "start": "php public/index.php",
+        "mock-provider-a": "php mock/providers/provider-a.php",
+        "mock-provider-b": "php mock/providers/provider-b.php"
+    }
+}

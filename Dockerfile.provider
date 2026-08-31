@@ -1,0 +1,24 @@
+FROM php:8.4-alpine
+
+RUN apk add --no-cache \
+    git unzip libstdc++ libgcc openssl-dev pcre-dev \
+    zlib-dev brotli-dev linux-headers $PHPIZE_DEPS
+
+RUN cd /tmp \
+    && git clone --depth 1 https://github.com/swoole/swoole-src.git \
+    && cd swoole-src \
+    && phpize && ./configure && make -j$(nproc) && make install \
+    && docker-php-ext-enable swoole
+
+COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
+
+WORKDIR /app
+
+COPY composer.json ./
+RUN composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["php", "mock/provider.php"]

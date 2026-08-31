@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: game-shop-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-game_shop}
+      POSTGRES_USER: ${DB_USER:-app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-app} -d ${DB_NAME:-game_shop}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: game-shop-app
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-game_shop}
+      DB_USER: ${DB_USER:-app}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      PROVIDER_A_HOST: provider-a
+      PROVIDER_A_PORT: 8000
+      PROVIDER_B_HOST: provider-b
+      PROVIDER_B_PORT: 8000
+      PROVIDER_TIMEOUT_MS: 5000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      - postgres
+
+  provider-a:
+    build:
+      context: .
+      dockerfile: Dockerfile.provider
+    container_name: game-shop-provider-a
+    ports:
+      - "8001:8000"
+    environment:
+      PROVIDER_NAME: A
+      PROVIDER_PORT: 8000
+      MOCK_ERROR_RATE: ${MOCK_ERROR_RATE_A:-20}
+      MOCK_TIMEOUT_RATE: ${MOCK_TIMEOUT_RATE_A:-10}
+      MOCK_TIMEOUT_DURATION_SEC: ${MOCK_TIMEOUT_DURATION_SEC_A:-7}
+    volumes:
+      - ./mock:/app/mock
+
+  provider-b:
+    build:
+      context: .
+      dockerfile: Dockerfile.provider
+    container_name: game-shop-provider-b
+    ports:
+      - "8002:8000"
+    environment:
+      PROVIDER_NAME: B
+      PROVIDER_PORT: 8000
+      MOCK_ERROR_RATE: ${MOCK_ERROR_RATE_B:-10}
+      MOCK_TIMEOUT_RATE: ${MOCK_TIMEOUT_RATE_B:-5}
+      MOCK_TIMEOUT_DURATION_SEC: ${MOCK_TIMEOUT_DURATION_SEC:-5}
+    volumes:
+      - ./mock:/app/mock
+
+volumes:
+  postgres_data:
