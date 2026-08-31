@@ -10,6 +10,7 @@
 	test-fallback \
 	test-reconciliation \
 	test-recovery \
+	test-catalog \
 	reset-stock \
 	empty-stock \
 	clean-orders \
@@ -35,20 +36,20 @@ ps:
 test: reset-stock test-race test-timeout test-fallback test-reconciliation test-recovery test-catalog
 
 test-race:
-	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=0 docker compose up -d provider-a
-	MOCK_ERROR_RATE_B=0 MOCK_TIMEOUT_RATE_B=0 docker compose up -d provider-b
+	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=0 docker compose up -d --force-recreate provider-a
+	MOCK_ERROR_RATE_B=0 MOCK_TIMEOUT_RATE_B=0 docker compose up -d --force-recreate provider-b
 	./scripts/test-race.sh
-	docker compose up -d provider-a provider-b
+	docker compose up -d --force-recreate provider-a provider-b
 
 test-timeout:
-	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=100 docker compose up -d provider-a
+	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=100 docker compose up -d --force-recreate provider-a
 	./scripts/test-timeout.sh
-	docker compose up -d provider-a
+	docker compose up -d --force-recreate provider-a
 
 test-fallback:
-	MOCK_ERROR_RATE_A=100 MOCK_TIMEOUT_RATE_A=0 docker compose up -d provider-a
+	MOCK_ERROR_RATE_A=100 MOCK_TIMEOUT_RATE_A=0 docker compose up -d --force-recreate provider-a
 	./scripts/test-fallback.sh
-	docker compose up -d provider-a
+	docker compose up -d --force-recreate provider-a
 
 test-reconciliation:
 	./scripts/test-reconciliation.sh
@@ -58,17 +59,6 @@ test-recovery:
 
 test-catalog:
 	./scripts/test-catalog.sh
-
-# Сценарии с настройками провайдеров
-test-timeout-scenario:
-	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=100 docker compose up -d provider-a
-	./scripts/test-timeout.sh
-	docker compose up -d provider-a
-
-test-fallback-scenario:
-	MOCK_ERROR_RATE_A=100 MOCK_TIMEOUT_RATE_A=0 docker compose up -d provider-a
-	./scripts/test-fallback.sh
-	docker compose up -d provider-a
 
 # Очистка системы
 reset-stock:

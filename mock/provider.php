@@ -29,9 +29,9 @@ $providerName = getenv('PROVIDER_NAME') ?: 'A';
 $port = (int)(getenv('PROVIDER_PORT') ?: 8000);
 
 // Mock-параметры
-$errorRate = (int)(getenv('MOCK_ERROR_RATE') ?: 20);
+$errorRate = getenv('MOCK_ERROR_RATE') !== false ? (int)getenv('MOCK_ERROR_RATE') : 20;
 $timeoutRate = (int)(getenv('MOCK_TIMEOUT_RATE') ?: 10);
-$timeoutDuration = (int)(getenv('MOCK_TIMEOUT_DURATION_SEC') ?: 7);
+$timeoutDuration = getenv('MOCK_TIMEOUT_DURATION_SEC') !== false ? (int)getenv('MOCK_TIMEOUT_DURATION_SEC') : 7;
 
 $server = new Server('0.0.0.0', $port);
 
