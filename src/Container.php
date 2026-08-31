@@ -7,15 +7,9 @@ namespace App;
 use App\Config\Options;
 use DI\ContainerBuilder;
 use Psr\Log\LoggerInterface;
-use App\Logger\Logger;
+use App\Service\ProviderClient;
 use App\Storage\StorageInterface;
 use App\Storage\SwooleTableStorage;
-use App\Service\OrderService;
-use App\Service\PaymentService;
-use App\Service\DeliveryService;
-use App\Service\ProviderClient;
-use App\Controller\OrderController;
-use App\Controller\WebhookController;
 use App\Support\StdoutLogger;
 
 use function DI\autowire;
@@ -28,29 +22,16 @@ class Container
     {
         $builder = new ContainerBuilder();
 
+        $builder->useAutowiring(true);
+
         $builder->addDefinitions([
             Options::class => $options,
 
-            LoggerInterface::class => function () use ($options) {
-                return new StdoutLogger($options->logLevel);
-            },
-
             StorageInterface::class => autowire(SwooleTableStorage::class),
 
-            Database::class => function () use ($options) {
-                return new Database($options);
-            },
-
-            ProviderClient::class => function () use ($options) {
-                return new ProviderClient($options);
-            },
-
-            DeliveryService::class => autowire(DeliveryService::class),
-            PaymentService::class => autowire(PaymentService::class),
-            OrderService::class => autowire(OrderService::class),
-
-            OrderController::class => autowire(OrderController::class),
-            WebhookController::class => autowire(WebhookController::class),
+            LoggerInterface::class => static fn () => new StdoutLogger($options->logLevel),
+            Database::class => static fn () => new Database($options),
+            ProviderClient::class => static fn () => new ProviderClient($options),
         ]);
 
         self::$container = $builder->build();

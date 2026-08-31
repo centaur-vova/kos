@@ -21,6 +21,7 @@ class Application
 
     private function registerRoutes(): void
     {
+        $this->router->get('/reconciliation', [Controller\ReconciliationController::class, 'index']);
         $this->router->post('/orders', [Controller\OrderController::class, 'create']);
         $this->router->get('/orders/{id}', [Controller\OrderController::class, 'show']);
         $this->router->post('/webhook/payment', [Controller\WebhookController::class, 'handle']);

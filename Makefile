@@ -1,4 +1,4 @@
-.PHONY: up down restart logs ps test test-race test-timeout test-fallback
+.PHONY: up down restart logs ps test test-race test-timeout test-fallback test-reconciliation reset-stock
 
 # Запуск
 up:
@@ -17,7 +17,7 @@ ps:
 	docker compose ps
 
 # Тесты
-test: test-race test-timeout test-fallback
+test: test-race test-timeout test-fallback test-reconciliation
 
 test-race:
 	./scripts/test-race.sh
@@ -30,6 +30,9 @@ test-fallback:
 	./scripts/test-fallback.sh
 	docker compose up -d provider-a
 
+test-reconciliation:
+	./scripts/test-reconciliation.sh
+
 # Сценарии с настройками провайдеров
 test-timeout-scenario:
 	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=100 docker compose up -d provider-a
@@ -40,3 +43,6 @@ test-fallback-scenario:
 	MOCK_ERROR_RATE_A=100 MOCK_TIMEOUT_RATE_A=0 docker compose up -d provider-a
 	./scripts/test-fallback.sh
 	docker compose up -d provider-a
+
+reset-stock:
+	docker compose exec postgres psql -U app -d game_shop -c "UPDATE products SET stock = 1000, reserved = 0;"
