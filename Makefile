@@ -17,10 +17,7 @@ ps:
 	docker compose ps
 
 # Тесты
-test:
-	./scripts/test-race.sh
-	./scripts/test-timeout.sh
-	./scripts/test-fallback.sh
+test: test-race test-timeout test-fallback
 
 test-race:
 	./scripts/test-race.sh

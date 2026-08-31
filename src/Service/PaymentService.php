@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Database;
+use App\Enum\OrderStatus;
 use App\Storage\StorageInterface;
 use Swoole\Coroutine;
-use Swoole\FastCGI\Record\Data;
 
 class PaymentService
 {
@@ -88,7 +88,7 @@ class PaymentService
         }
 
         // Проверяем статус заказа
-        if ($order['status'] === 'delivered') {
+        if (OrderStatus::tryFrom($order['status']) === OrderStatus::Delivered) {
             $stmt = $pdo->prepare(
                 "INSERT INTO payments (event_id, order_id, status, amount, currency)
                  VALUES (?, ?, 'duplicate_after_delivery', ?, ?)"
@@ -105,7 +105,7 @@ class PaymentService
             ];
         }
 
-        if ($order['status'] === 'payment_failed') {
+        if (OrderStatus::tryFrom($order['status']) === OrderStatus::PaymentFailed) {
             $stmt = $pdo->prepare(
                 "INSERT INTO payments (event_id, order_id, status, amount, currency)
                  VALUES (?, ?, 'late_payment', ?, ?)"
@@ -148,14 +148,18 @@ class PaymentService
         if ($payload['status'] === 'paid') {
             $stmt = $pdo->prepare(
                 "UPDATE orders
-                 SET status = 'paid',
+                 SET status = :paid_status,
                      paid_at = NOW(),
                      updated_at = NOW(),
                      version = version + 1
-                 WHERE id = ?
-                 AND status = 'created'"
+                 WHERE id = :order_id
+                 AND status = :created_status"
             );
-            $stmt->execute([$order['id']]);
+            $stmt->execute([
+                'paid_status' => OrderStatus::Paid->value,
+                'order_id' => $order['id'],
+                'created_status' => OrderStatus::Created->value,
+            ]);
 
             if ($stmt->rowCount() === 1) {
                 return [
@@ -171,13 +175,17 @@ class PaymentService
         } elseif ($payload['status'] === 'failed') {
             $stmt = $pdo->prepare(
                 "UPDATE orders
-                 SET status = 'payment_failed',
+                 SET status = :failed_status,
                      updated_at = NOW(),
                      version = version + 1
-                 WHERE id = ?
-                 AND status = 'created'"
+                 WHERE id = :order_id
+                 AND status = :created_status"
             );
-            $stmt->execute([$order['id']]);
+            $stmt->execute([
+                'failed_status' => OrderStatus::PaymentFailed->value,
+                'order_id' => $order['id'],
+                'created_status' => OrderStatus::Created->value,
+            ]);
 
             return [
                 'status' => 'payment_failed',

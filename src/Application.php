@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App;
 
+use App\Config\Options;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 
@@ -11,8 +12,9 @@ class Application
 {
     private Router $router;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly Options $options,
+    ) {
         $this->router = new Router();
         $this->registerRoutes();
     }
@@ -30,5 +32,10 @@ class Application
     public function handle(Request $request, Response $response): void
     {
         $this->router->dispatch($request, $response);
+    }
+
+    public function getOptions(): Options
+    {
+        return $this->options;
     }
 }

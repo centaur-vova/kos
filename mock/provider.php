@@ -5,15 +5,18 @@ declare(strict_types=1);
 use Swoole\Http\Server;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
-use App\Config;
+use App\Bootstrap;
 use App\Container;
 use App\Storage\StorageInterface;
 use Psr\Log\LoggerInterface;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-Config::load();
-Container::init();
+// Загружаем конфиг
+$options = Bootstrap::init(__DIR__ . '/..');
+
+// Инициализируем DI
+Container::init($options);
 
 // Logger
 $logger = Container::get(LoggerInterface::class);
@@ -21,12 +24,14 @@ $logger = Container::get(LoggerInterface::class);
 // Storage
 $storage = Container::get(StorageInterface::class);
 
-$port = Config::getInt('PROVIDER_PORT', 8000);
-$providerName = Config::get('PROVIDER_NAME', 'A');
+// Параметры провайдера
+$providerName = getenv('PROVIDER_NAME') ?: 'A';
+$port = (int)(getenv('PROVIDER_PORT') ?: 8000);
 
-$errorRate = Config::getInt('MOCK_ERROR_RATE', 20);
-$timeoutRate = Config::getInt('MOCK_TIMEOUT_RATE', 10);
-$timeoutDuration = Config::getInt('MOCK_TIMEOUT_DURATION_SEC', 7);
+// Mock-параметры
+$errorRate = (int)(getenv('MOCK_ERROR_RATE') ?: 20);
+$timeoutRate = (int)(getenv('MOCK_TIMEOUT_RATE') ?: 10);
+$timeoutDuration = (int)(getenv('MOCK_TIMEOUT_DURATION_SEC') ?: 7);
 
 $server = new Server('0.0.0.0', $port);
 
@@ -58,7 +63,12 @@ $server->on('request', function (Request $req, Response $res) use (
     $existingCode = $storage->get("provider:issued:{$requestId}");
 
     if ($existingCode) {
-        $logger->info("[Provider {$providerName}] Returning cached code for {$requestId}: {$existingCode}");
+        $logger->info("Returning cached code", [
+            'provider' => $providerName,
+            'request_id' => $requestId,
+            'code' => $existingCode,
+        ]);
+
         $res->end(json_encode([
             'status' => 'ok',
             'request_id' => $requestId,
@@ -75,7 +85,11 @@ $server->on('request', function (Request $req, Response $res) use (
         $code = generateCode($sku);
         $storage->set("provider:issued:{$requestId}", $code);
 
-        $logger->info("[Provider {$providerName}] Timeout simulation for {$requestId}, code issued: {$code}");
+        $logger->info("Timeout simulation", [
+            'provider' => $providerName,
+            'request_id' => $requestId,
+            'code' => $code,
+        ]);
 
         Swoole\Coroutine::sleep($timeoutDuration);
 
@@ -88,7 +102,11 @@ $server->on('request', function (Request $req, Response $res) use (
     }
 
     if ($behavior < ($timeoutRate + $errorRate)) {
-        $logger->info("[Provider {$providerName}] Error simulation for {$requestId}");
+        $logger->info("Error simulation", [
+            'provider' => $providerName,
+            'request_id' => $requestId,
+        ]);
+
         $res->status(500);
         $res->end(json_encode([
             'status' => 'error',
@@ -100,7 +118,11 @@ $server->on('request', function (Request $req, Response $res) use (
     $code = generateCode($sku);
     $storage->set("provider:issued:{$requestId}", $code);
 
-    $logger->info("[Provider {$providerName}] Success for {$requestId}: {$code}");
+    $logger->info("Success", [
+        'provider' => $providerName,
+        'request_id' => $requestId,
+        'code' => $code,
+    ]);
 
     $res->end(json_encode([
         'status' => 'ok',

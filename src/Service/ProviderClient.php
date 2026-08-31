@@ -4,46 +4,34 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Config;
 use App\Exception\Provider\ProviderException;
 use App\Exception\Provider\ProviderTimeoutException;
+use App\Config\Options;
 use Swoole\Coroutine\Http\Client;
 
 class ProviderClient
 {
-    private array $providers;
-
-    public function __construct()
-    {
-        $this->providers = [
-            'A' => [
-                'host' => Config::get('PROVIDER_A_HOST', 'localhost'),
-                'port' => Config::getInt('PROVIDER_A_PORT', 8000),
-            ],
-            'B' => [
-                'host' => Config::get('PROVIDER_B_HOST', 'localhost'),
-                'port' => Config::getInt('PROVIDER_B_PORT', 8000),
-            ],
-        ];
+    public function __construct(
+        private Options $options,
+    ) {
     }
+
 
     public function issue(
         string $requestId,
         string $sku,
         string $orderCode,
         string $provider,
-        int $timeoutMs,
     ): array {
-        $providerConfig = $this->providers[$provider] ?? $this->providers['A'];
+        $config = $this->options->getProvider($provider);
 
         $client = new Client(
-            $providerConfig['host'],
-            $providerConfig['port'],
-            false
+            $config->host,
+            $config->port,
         );
 
         $client->set([
-            'timeout' => $timeoutMs / 1000,
+            'timeout' => $config->timeoutMs / 1000,
         ]);
 
         $payload = json_encode([

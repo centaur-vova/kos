@@ -4,17 +4,19 @@ declare(strict_types=1);
 
 namespace App;
 
-use App\Controller\OrderController;
-use App\Controller\WebhookController;
+use App\Config\Options;
 use DI\ContainerBuilder;
+use Psr\Log\LoggerInterface;
+use App\Logger\Logger;
 use App\Storage\StorageInterface;
+use App\Storage\SwooleTableStorage;
+use App\Service\OrderService;
 use App\Service\PaymentService;
 use App\Service\DeliveryService;
-use App\Service\OrderService;
 use App\Service\ProviderClient;
-use App\Storage\SwooleTableStorage;
+use App\Controller\OrderController;
+use App\Controller\WebhookController;
 use App\Support\StdoutLogger;
-use Psr\Log\LoggerInterface;
 
 use function DI\autowire;
 
@@ -22,33 +24,31 @@ class Container
 {
     private static \DI\Container $container;
 
-    public static function init(): void
+    public static function init(Options $options): void
     {
         $builder = new ContainerBuilder();
 
         $builder->addDefinitions([
-            // Logger
-            LoggerInterface::class => autowire(StdoutLogger::class),
+            Options::class => $options,
 
-            // Storage
+            LoggerInterface::class => function () use ($options) {
+                return new StdoutLogger($options->logLevel);
+            },
+
             StorageInterface::class => autowire(SwooleTableStorage::class),
 
-            // Database
-            Database::class => autowire(Database::class),
+            Database::class => function () use ($options) {
+                return new Database($options);
+            },
 
-            // ProviderClient
-            ProviderClient::class => autowire(ProviderClient::class),
+            ProviderClient::class => function () use ($options) {
+                return new ProviderClient($options);
+            },
 
-            // DeliveryService
             DeliveryService::class => autowire(DeliveryService::class),
-
-            // PaymentService
             PaymentService::class => autowire(PaymentService::class),
-
-            // OrderService
             OrderService::class => autowire(OrderService::class),
 
-            // Controllers
             OrderController::class => autowire(OrderController::class),
             WebhookController::class => autowire(WebhookController::class),
         ]);

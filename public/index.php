@@ -6,6 +6,7 @@ use Swoole\Http\Server;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 use App\Application;
+use App\Bootstrap;
 use App\Config;
 use App\Container;
 use Psr\Log\LoggerInterface;
@@ -16,21 +17,23 @@ ini_set('log_errors', '0');
 
 require __DIR__ . '/../vendor/autoload.php';
 
-// Загружаем конфиг
-Config::load();
-
-// Инициализируем DI
-Container::init();
-
-// Включаем корутины для PDO
+// Включаем корутины
 Swoole\Runtime::enableCoroutine(SWOOLE_HOOK_ALL);
 
-$app = new Application();
+// Загружаем конфиг
+$options = Bootstrap::init(__DIR__ . '/..');
+
+// Инициализируем DI
+Container::init($options);
+
+// Создаём приложение
+$app = new Application($options);
 
 $server = new Server(
-    host: Config::get('SERVER_HOST', '0.0.0.0'),
-    port: Config::getInt('SERVER_PORT', 8080),
+    host: $options->serverHost,
+    port: $options->serverPort,
 );
+
 
 $logger = Container::get(LoggerInterface::class);
 
