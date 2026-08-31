@@ -25,6 +25,10 @@ final readonly class CatalogService
              ORDER BY type, price"
         );
 
-        return $stmt->fetchAll();
+        $products = $stmt->fetchAll();
+
+        $pdo = null; // Явно закрываем сокет
+
+        return $products;
     }
 }

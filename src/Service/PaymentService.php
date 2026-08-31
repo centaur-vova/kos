@@ -71,8 +71,9 @@ final readonly class PaymentService
             ];
         }
 
+        // Pessimistic lock for update
         $stmt = $pdo->prepare(
-            "SELECT * FROM orders WHERE order_code = ?"
+            "SELECT * FROM orders WHERE order_code = ? FOR UPDATE"
         );
         $stmt->execute([$orderCode]);
         $order = $stmt->fetch();
