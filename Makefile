@@ -11,6 +11,7 @@
 	test-reconciliation \
 	test-recovery \
 	reset-stock \
+	empty-stock \
 	clean-orders \
 	clean
 
@@ -31,7 +32,7 @@ ps:
 	docker compose ps
 
 # Тесты
-test: test-race test-timeout test-fallback test-reconciliation
+test: test-race test-timeout test-fallback test-reconciliation test-catalog
 
 test-race:
 	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=0 docker compose up -d provider-a
@@ -55,6 +56,9 @@ test-reconciliation:
 test-recovery:
 	./scripts/test-recovery.sh
 
+test-catalog:
+	./scripts/test-catalog.sh
+
 # Сценарии с настройками провайдеров
 test-timeout-scenario:
 	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=100 docker compose up -d provider-a
@@ -69,6 +73,10 @@ test-fallback-scenario:
 # Очистка системы
 reset-stock:
 	docker compose exec postgres psql -U app -d game_shop -c "UPDATE products SET stock = 1000, reserved = 0;"
+
+# Установить сток в нули
+empty-stock:
+	docker compose exec postgres psql -U app -d game_shop -c "UPDATE products SET stock = 0, reserved = 0;"
 
 clean-orders:
 	docker compose exec postgres psql -U app -d game_shop -c "DELETE FROM deliveries; DELETE FROM payments; DELETE FROM orders; UPDATE products SET reserved = 0;"
