@@ -18,6 +18,10 @@ final readonly class PaymentWebhook
 
     public static function fromArray(array $data): self
     {
+        if (!isset($data['event_id'], $data['order_id'], $data['status'], $data['amount'])) {
+            throw new \InvalidArgumentException('Missing required fields for PaymentWebhook DTO');
+        }
+
         return new self(
             eventId: $data['event_id'],
             orderCode: $data['order_id'],

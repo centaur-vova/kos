@@ -30,14 +30,14 @@ class StdoutLogger extends AbstractLogger
             return;
         }
 
-        $time = microtime(true);
-        $date = date('H:i:s', (int)$time);
-        $ms = sprintf('%03d', ($time - (int)$time) * 1000);
+        $microtime = microtime(true);
+        $date = (new \DateTimeImmutable("@" . sprintf("%.3f", $microtime)))
+            ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            ->format('H:i:s.v');
 
         $output = sprintf(
-            "[%s.%s] [%s] %s %s\n",
+            "[%s] [%s] %s %s\n",
             $date,
-            $ms,
             strtoupper($levelString),
             $message,
             $context ? json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : ''

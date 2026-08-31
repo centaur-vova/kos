@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Storage;
 
+use App\Config\Options;
 use Swoole\Table;
 
 final class SwooleTableStorage implements StorageInterface
 {
-    private const TABLE_SIZE = 1024; // Hardcoded for demo
     private Table $table;
 
-    public function __construct()
+    public function __construct(Options $options)
     {
-        $this->table = new Table(self::TABLE_SIZE);
+        $this->table = new Table($options->swooleStorageTableSize);
         $this->table->column('value', Table::TYPE_STRING, 255);
         $this->table->column('ttl', Table::TYPE_INT, 4);
         $this->table->create();

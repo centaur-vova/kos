@@ -45,6 +45,7 @@ final readonly class Bootstrap
             recoveryStuckAfterMin: $loader->getInt('RECOVERY_STUCK_AFTER_MIN', 5),
             recoveryBatchSize: $loader->getInt('RECOVERY_BATCH_SIZE', 10),
             paymentIdempotencyTtlSec: $loader->getInt('PAYMENT_IDEMPOTENCY_TTL_SEC', 86400),
+            swooleStorageTableSize: $loader->getInt('SWOOLE_STORAGE_TABLE_SIZE', 1024),
         );
     }
 }
