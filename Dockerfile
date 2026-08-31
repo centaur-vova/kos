@@ -36,11 +36,11 @@ RUN chmod +x /usr/local/bin/composer
 
 WORKDIR /app
 
-# Install PHP dependencies
-COPY composer.json ./
+# Copy composer.json first for caching purposes
+COPY composer.json composer.lock* ./
 RUN composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs
 
-# Copy source code
+# Copy sources
 COPY . .
 
 EXPOSE 8080

@@ -69,6 +69,6 @@ empty-stock:
 	docker compose exec postgres psql -U app -d game_shop -c "UPDATE products SET stock = 0, reserved = 0;"
 
 clean-orders:
-	docker compose exec postgres psql -U app -d game_shop -c "DELETE FROM deliveries; DELETE FROM payments; DELETE FROM orders; UPDATE products SET reserved = 0;"
+	docker compose exec postgres psql -U app -d game_shop -c "TRUNCATE deliveries, payments, orders RESTART IDENTITY CASCADE; UPDATE products SET reserved = 0;"
 
 clean: reset-stock clean-orders
