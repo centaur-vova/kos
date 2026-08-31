@@ -9,16 +9,16 @@ use App\Enum\OrderStatus;
 use App\Exception\Provider\ProviderException;
 use App\Exception\Provider\ProviderTimeoutException;
 use App\Config\Options;
-use App\Storage\StorageInterface;
+use App\Enum\DeliveryStatus;
 use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 
-class DeliveryService
+final class DeliveryService
 {
     public function __construct(
         private Database $db,
         private ProviderClient $providerClient,
-        private StorageInterface $storage,
+        private LockService $lockService,
         private Options $options,
         private LoggerInterface $logger,
     ) {
@@ -42,26 +42,19 @@ class DeliveryService
     {
         $this->logger->info('deliver', ['order_id' => $orderId]);
 
-        // Блокировка через Storage
         $lockKey = "delivery:lock:{$orderId}";
 
-        if (!$this->storage->set($lockKey, 'locked', 30)) {
-            $this->logger->info('Failed to acquire lock', ['order_id' => $orderId]);
-            return;
-        }
-
-        try {
+        $this->lockService->withLock($lockKey, function () use ($orderId) {
+            $firstProvider = $this->options->getFirstProvider();
             $requestId = "req_{$orderId}-1";
 
-            if (!$this->createDeliveryRecord($orderId, $requestId, 'A')) {
+            if (!$this->createDeliveryRecord($orderId, $requestId, $firstProvider->name)) {
                 $this->handleExistingDelivery($orderId, $requestId);
                 return;
             }
 
-            $this->tryDeliver($orderId, $requestId, 'A');
-        } finally {
-            $this->storage->del($lockKey);
-        }
+            $this->tryDeliver($orderId, $requestId, $firstProvider->name);
+        });
     }
 
     private function createDeliveryRecord(string $orderId, string $requestId, string $provider): bool
@@ -71,9 +64,14 @@ class DeliveryService
 
             $stmt = $pdo->prepare(
                 "INSERT INTO deliveries (order_id, request_id, provider, status)
-                 VALUES (?, ?, ?, 'pending')"
+                 VALUES (:order_id, :request_id, :provider, :pending_status)"
             );
-            $stmt->execute([$orderId, $requestId, $provider]);
+            $stmt->execute([
+                'order_id' => $orderId,
+                'request_id' => $requestId,
+                'provider' => $provider,
+                'pending_status' => DeliveryStatus::Pending->value,
+            ]);
 
             return true;
 
@@ -82,8 +80,6 @@ class DeliveryService
                 return false;
             }
             throw $e;
-        } catch (\Throwable $e) {
-            $this->logger->info("GOT ERROR ", [gettype($e)]);
         }
     }
 
@@ -101,25 +97,23 @@ class DeliveryService
             return;
         }
 
-        if ($delivery['status'] === 'issued') {
+        if ($delivery['status'] === DeliveryStatus::Issued->value) {
             $this->completeOrderWithCode($orderId, $delivery['code']);
             return;
         }
 
-        if ($delivery['status'] === 'timeout') {
+        if ($delivery['status'] === DeliveryStatus::Timeout->value) {
             $this->retryWithBackoff($orderId, $requestId, $delivery['provider']);
             return;
         }
 
-        if ($delivery['status'] === 'pending') {
+        if ($delivery['status'] === DeliveryStatus::Pending->value) {
             Coroutine::sleep(1);
             $this->handleExistingDelivery($orderId, $requestId);
             return;
         }
 
-        if ($delivery['provider'] === 'A') {
-            $this->tryFallbackToProviderB($orderId);
-        }
+        $this->tryFallback($orderId, $delivery['provider']);
     }
 
     private function tryDeliver(string $orderId, string $requestId, string $provider): void
@@ -189,10 +183,13 @@ class DeliveryService
     {
         $pdo = $this->db->getConnection();
         $stmt = $pdo->prepare(
-            "UPDATE deliveries SET status = 'timeout', completed_at = NOW()
-             WHERE request_id = ?"
+            "UPDATE deliveries SET status = :timeout_status, completed_at = NOW()
+             WHERE request_id = :request_id"
         );
-        $stmt->execute([$requestId]);
+        $stmt->execute([
+            'timeout_status' => DeliveryStatus::Timeout->value,
+            'request_id' => $requestId,
+        ]);
 
         $this->retryWithBackoff($orderId, $requestId, $provider);
     }
@@ -224,18 +221,14 @@ class DeliveryService
                     return;
                 }
 
-                if ($provider === 'A') {
-                    $this->tryFallbackToProviderB($orderId);
-                }
+                $this->tryFallback($orderId, $provider);
                 return;
 
             } catch (ProviderTimeoutException $e) {
                 continue;
 
             } catch (ProviderException $e) {
-                if ($provider === 'A') {
-                    $this->tryFallbackToProviderB($orderId);
-                }
+                $this->tryFallback($orderId, $provider);
                 return;
             }
         }
@@ -243,11 +236,18 @@ class DeliveryService
         $this->markDeliveryFailed($orderId, $requestId, $provider);
     }
 
-    private function tryFallbackToProviderB(string $orderId): void
+    private function tryFallback(string $orderId, string $currentProvider): void
     {
-        $fallbackRequestId = "req_{$orderId}-2";
+        $nextProvider = $this->options->getNextProvider($currentProvider);
 
-        if (!$this->createDeliveryRecord($orderId, $fallbackRequestId, 'B')) {
+        if ($nextProvider === null) {
+            $this->markDeliveryFailed($orderId, "req_{$orderId}-1", $currentProvider);
+            return;
+        }
+
+        $fallbackRequestId = "req_{$orderId}-" . (array_search($nextProvider->name, array_keys($this->options->providers), true) + 1);
+
+        if (!$this->createDeliveryRecord($orderId, $fallbackRequestId, $nextProvider->name)) {
             $pdo = $this->db->getConnection();
             $stmt = $pdo->prepare(
                 "SELECT * FROM deliveries WHERE request_id = ?"
@@ -255,13 +255,13 @@ class DeliveryService
             $stmt->execute([$fallbackRequestId]);
             $delivery = $stmt->fetch();
 
-            if ($delivery && $delivery['status'] === 'issued') {
+            if ($delivery && $delivery['status'] === DeliveryStatus::Issued->value) {
                 $this->completeOrderWithCode($orderId, $delivery['code']);
             }
             return;
         }
 
-        $this->tryDeliver($orderId, $fallbackRequestId, 'B');
+        $this->tryDeliver($orderId, $fallbackRequestId, $nextProvider->name);
     }
 
     private function saveDeliveryResult(string $orderId, string $requestId, string $provider, string $code): void
@@ -269,16 +269,17 @@ class DeliveryService
         $pdo = $this->db->getConnection();
 
         $stmt = $pdo->prepare(
-            "UPDATE deliveries
-             SET status = 'issued', code = ?, completed_at = NOW()
-             WHERE request_id = ?"
+            "UPDATE deliveries SET status = :issued_status, code = :code, completed_at = NOW()
+             WHERE request_id = :request_id"
         );
-        $stmt->execute([$code, $requestId]);
+        $stmt->execute([
+            'issued_status' => DeliveryStatus::Issued->value,
+            'code' => $code,
+            'request_id' => $requestId,
+        ]);
 
         $stmt = $pdo->prepare(
-            "UPDATE keys_pool
-             SET order_id = ?, status = 'issued', issued_at = NOW()
-             WHERE code = ?"
+            "UPDATE keys_pool SET order_id = ?, status = 'issued', issued_at = NOW() WHERE code = ?"
         );
         $stmt->execute([$orderId, $code]);
     }
@@ -361,10 +362,14 @@ class DeliveryService
         $pdo = $this->db->getConnection();
 
         $stmt = $pdo->prepare(
-            "UPDATE deliveries SET status = 'error', code = 'out_of_stock', completed_at = NOW()
-             WHERE request_id = ?"
+            "UPDATE deliveries SET status = :error_status, code = :out_of_stock, completed_at = NOW()
+             WHERE request_id = :request_id"
         );
-        $stmt->execute([$requestId]);
+        $stmt->execute([
+            'error_status' => DeliveryStatus::Error->value,
+            'out_of_stock' => 'out_of_stock',
+            'request_id' => $requestId,
+        ]);
 
         $stmt = $pdo->prepare(
             "UPDATE orders SET status = :out_status, updated_at = NOW(), version = version + 1
@@ -377,9 +382,7 @@ class DeliveryService
             'delivering_status' => OrderStatus::Delivering->value,
         ]);
 
-        if ($provider === 'A') {
-            $this->tryFallbackToProviderB($orderId);
-        }
+        $this->tryFallback($orderId, $provider);
     }
 
     private function handleProviderError(string $orderId, string $requestId, string $provider): void
@@ -387,16 +390,15 @@ class DeliveryService
         $pdo = $this->db->getConnection();
 
         $stmt = $pdo->prepare(
-            "UPDATE deliveries SET status = 'error', completed_at = NOW()
-             WHERE request_id = ?"
+            "UPDATE deliveries SET status = :error_status, completed_at = NOW()
+             WHERE request_id = :request_id"
         );
-        $stmt->execute([$requestId]);
+        $stmt->execute([
+            'error_status' => DeliveryStatus::Error->value,
+            'request_id' => $requestId,
+        ]);
 
-        if ($provider === 'A') {
-            $this->tryFallbackToProviderB($orderId);
-        } else {
-            $this->markDeliveryFailed($orderId, $requestId, $provider);
-        }
+        $this->tryFallback($orderId, $provider);
     }
 
     private function markDeliveryFailed(string $orderId, string $requestId, string $provider): void
