@@ -7,7 +7,6 @@ use Swoole\Http\Request;
 use Swoole\Http\Response;
 use App\Application;
 use App\Bootstrap;
-use App\Config;
 use App\Container;
 use App\Service\RecoveryService;
 use Psr\Log\LoggerInterface;
@@ -39,7 +38,7 @@ $server = new Server(
 $logger = Container::get(LoggerInterface::class);
 
 $server->set([
-    'worker_num' => Config::getInt('WORKER_NUM', swoole_cpu_num() * 2),
+    'worker_num' => $options->workerNum,
     'max_request' => 100000,
     'log_level' => SWOOLE_LOG_WARNING,
 ]);

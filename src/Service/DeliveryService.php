@@ -108,8 +108,7 @@ final class DeliveryService
         }
 
         if ($delivery['status'] === DeliveryStatus::Pending->value) {
-            Coroutine::sleep(1);
-            $this->handleExistingDelivery($orderId, $requestId);
+            $this->logger->info('Delivery is pending, skipping', ['request_id' => $requestId]);
             return;
         }
 

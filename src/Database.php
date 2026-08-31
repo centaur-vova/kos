@@ -4,27 +4,32 @@ declare(strict_types=1);
 
 namespace App;
 
+use App\Config\Options;
 use PDO;
 
 final class Database
 {
     public const UNIQUE_VIOLATION = '23505';
 
+    public function __construct(
+        private readonly Options $options,
+    ) {
+    }
+
     public function getConnection(): PDO
     {
 
-        $host = Config::get('DB_HOST', 'localhost');
-        $port = Config::get('DB_PORT', '5432');
-        $dbname = Config::get('DB_NAME', 'game_shop');
-        $user = Config::get('DB_USER', 'app');
-        $password = Config::get('DB_PASSWORD', 'secret');
+        $dsn = sprintf(
+            'pgsql:host=%s;port=%d;dbname=%s',
+            $this->options->dbHost,
+            $this->options->dbPort,
+            $this->options->dbName,
+        );
 
-        $dsn = "pgsql:host={$host};port={$port};dbname={$dbname}";
-
-        return new PDO($dsn, $user, $password, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
+        return new \PDO($dsn, $this->options->dbUser, $this->options->dbPassword, [
+            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+            \PDO::ATTR_EMULATE_PREPARES => false,
         ]);
     }
 
