@@ -5,17 +5,21 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Database;
+use Psr\Log\LoggerInterface;
 
-class OrderService
+final readonly class OrderService
 {
     public function __construct(
-        private Database $db
+        private Database $db,
+        private LoggerInterface $logger,
     ) {
     }
 
     public function create(string $sku, string $userId): array
     {
-        return $this->db->transaction(function ($pdo) use ($sku, $userId) {
+        $this->logger->info('Creating order', ['sku' => $sku, 'user_id' => $userId]);
+
+        $order = $this->db->transaction(function ($pdo) use ($sku, $userId) {
             // Получаем товар
             $stmt = $pdo->prepare("SELECT * FROM products WHERE sku = ? FOR UPDATE");
             $stmt->execute([$sku]);
@@ -56,6 +60,10 @@ class OrderService
 
             return $order;
         });
+
+        $this->logger->info('Order created', ['order_code' => $order['order_code']]);
+
+        return $order;
     }
 
     public function getById(string $orderId): ?array
