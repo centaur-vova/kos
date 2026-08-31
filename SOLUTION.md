@@ -149,6 +149,20 @@
 
 В проде — заменил бы на FastRoute или Symfony Router, если бы маршрутов стало много.
 
+## Что нужно для прода
+
+- **Мониторинг** — Prometheus + Grafana, алерты
+- **Трейсинг** — OpenTelemetry + Jaeger
+- **Очереди** — NATS/RabbitMQ для фоновых задач
+- **Connection Pool** — Swoole\ConnectionPool для БД
+- **Money pattern** — moneyphp/money
+- **Repository pattern** — SQL из сервисов
+- **Graceful shutdown** — корректное завершение
+- **Rate limiting** — защита от DDoS
+- **Аутентификация** — JWT/API keys
+- **Версионирование API** — /api/v1/...
+- **CI/CD** — GitHub Actions/GitLab CI
+
 ## Масштабирование
 
 - Горизонтально: несколько инстансов API + балансировщик
