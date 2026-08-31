@@ -41,11 +41,12 @@ final class Database
             $pdo->beginTransaction();
             $result = $callback($pdo);
             $pdo->commit();
-
             return $result;
         } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) {
+            try {
                 $pdo->rollBack();
+            } catch (\Throwable) {
+                // Глушим ошибку разрыва сокета
             }
             throw $e;
         }

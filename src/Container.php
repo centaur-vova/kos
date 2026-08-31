@@ -12,7 +12,7 @@ use App\Storage\StorageInterface;
 use App\Storage\SwooleTableStorage;
 use App\Support\StdoutLogger;
 
-use function DI\autowire;
+use function DI\create;
 
 final class Container
 {
@@ -27,7 +27,7 @@ final class Container
         $builder->addDefinitions([
             Options::class => $options,
 
-            StorageInterface::class => autowire(SwooleTableStorage::class),
+            StorageInterface::class => create(SwooleTableStorage::class),
 
             LoggerInterface::class => static fn () => new StdoutLogger($options->logLevel),
             Database::class => static fn () => new Database($options),
