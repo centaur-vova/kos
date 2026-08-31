@@ -2,18 +2,18 @@
 
 -- Товары
 INSERT INTO products (sku, name, type, price, currency, image, stock) VALUES
-('STEAM-TOPUP-500', 'Пополнение Steam 500 ₽', 'topup', 500, 'RUB', 'assets/steam.png', 100),
-('STEAM-TOPUP-1000', 'Пополнение Steam 1000 ₽', 'topup', 1000, 'RUB', 'assets/steam.png', 100),
-('STEAM-TOPUP-2500', 'Пополнение Steam 2500 ₽', 'topup', 2500, 'RUB', 'assets/steam.png', 100),
-('KEY-CS2-PRIME', 'CS2 Prime Status ключ', 'key', 1290, 'RUB', 'assets/cs2.png', 50),
-('KEY-GTA5', 'GTA V ключ активации', 'key', 1990, 'RUB', 'assets/gta5.png', 50),
-('KEY-EFT', 'Escape from Tarkov ключ', 'key', 3490, 'RUB', 'assets/eft.png', 50),
-('SUB-DISCORD-1M', 'Discord Nitro 1 месяц', 'subscription', 399, 'RUB', 'assets/discord.png', 200),
-('SUB-YT-3M', 'YouTube Premium 3 месяца', 'subscription', 1490, 'RUB', 'assets/youtube.png', 200),
-('SUB-SPOTIFY-1M', 'Spotify Premium 1 месяц', 'subscription', 299, 'RUB', 'assets/spotify.png', 200),
-('GIFT-PSN-1000', 'PlayStation Store карта 1000 ₽', 'giftcard', 1000, 'RUB', 'assets/psn.png', 75),
-('GIFT-XBOX-1500', 'Xbox Gift Card 1500 ₽', 'giftcard', 1500, 'RUB', 'assets/xbox.png', 75),
-('GIFT-ROBLOX-800', 'Roblox 800 Robux', 'giftcard', 890, 'RUB', 'assets/roblox.png', 75);
+('STEAM-TOPUP-500', 'Пополнение Steam 500 ₽', 'topup', 500, 'RUB', 'assets/steam.png', 0),
+('STEAM-TOPUP-1000', 'Пополнение Steam 1000 ₽', 'topup', 1000, 'RUB', 'assets/steam.png', 0),
+('STEAM-TOPUP-2500', 'Пополнение Steam 2500 ₽', 'topup', 2500, 'RUB', 'assets/steam.png', 0),
+('KEY-CS2-PRIME', 'CS2 Prime Status ключ', 'key', 1290, 'RUB', 'assets/cs2.png'),
+('KEY-GTA5', 'GTA V ключ активации', 'key', 1990, 'RUB', 'assets/gta5.png'),
+('KEY-EFT', 'Escape from Tarkov ключ', 'key', 3490, 'RUB', 'assets/eft.png'),
+('SUB-DISCORD-1M', 'Discord Nitro 1 месяц', 'subscription', 399, 'RUB', 'assets/discord.png', 0),
+('SUB-YT-3M', 'YouTube Premium 3 месяца', 'subscription', 1490, 'RUB', 'assets/youtube.png', 0),
+('SUB-SPOTIFY-1M', 'Spotify Premium 1 месяц', 'subscription', 299, 'RUB', 'assets/spotify.png', 0),
+('GIFT-PSN-1000', 'PlayStation Store карта 1000 ₽', 'giftcard', 1000, 'RUB', 'assets/psn.png', 0),
+('GIFT-XBOX-1500', 'Xbox Gift Card 1500 ₽', 'giftcard', 1500, 'RUB', 'assets/xbox.png', 0),
+('GIFT-ROBLOX-800', 'Roblox 800 Robux', 'giftcard', 890, 'RUB', 'assets/roblox.png', 0);
 
 -- Пул ключей для KEY-товаров
 INSERT INTO keys_pool (code, sku, status) VALUES
@@ -68,5 +68,5 @@ INSERT INTO keys_pool (code, sku, status) VALUES
 ('W67T-ZB0Q-1XKB', 'KEY-EFT', 'available'),
 ('7EQM-K09J-XKUO', 'KEY-EFT', 'available');
 
--- Обновляем stock в products на основе keys_pool
+-- Пересчитываем stock для key-товаров из пула
 UPDATE products SET stock = (SELECT COUNT(*) FROM keys_pool WHERE keys_pool.sku = products.sku AND keys_pool.status = 'available') WHERE type = 'key';
