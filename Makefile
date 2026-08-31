@@ -32,7 +32,7 @@ ps:
 	docker compose ps
 
 # Тесты
-test: test-race test-timeout test-fallback test-reconciliation test-catalog
+test: reset-stock test-race test-timeout test-fallback test-reconciliation test-recovery test-catalog
 
 test-race:
 	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=0 docker compose up -d provider-a
