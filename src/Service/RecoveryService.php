@@ -33,6 +33,12 @@ final readonly class RecoveryService
              ORDER BY created_at
              LIMIT :batch_size"
         );
+
+        $this->logger->info('SQL params', [
+            'stuck_after_min' => $this->options->recoveryStuckAfterMin,
+            'batch_size' => $this->options->recoveryBatchSize,
+        ]);
+
         $stmt->execute([
             'paid' => OrderStatus::Paid->value,
             'delivering' => OrderStatus::Delivering->value,

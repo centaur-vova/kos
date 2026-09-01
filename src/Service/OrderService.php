@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Database;
+use App\DTO\OrderResponse;
 use Psr\Log\LoggerInterface;
 
 final readonly class OrderService
@@ -15,7 +16,7 @@ final readonly class OrderService
     ) {
     }
 
-    public function create(string $sku, string $userId): array
+    public function create(string $sku, string $userId): OrderResponse
     {
         $this->logger->info('Creating order', ['sku' => $sku, 'user_id' => $userId]);
 
@@ -63,10 +64,10 @@ final readonly class OrderService
 
         $this->logger->info('Order created', ['order_code' => $order['order_code']]);
 
-        return $order;
+        return OrderResponse::fromArray($order);
     }
 
-    public function getById(string $orderId): ?array
+    public function getById(string $orderId): ?OrderResponse
     {
         $pdo = $this->db->getConnection();
 
@@ -91,11 +92,9 @@ final readonly class OrderService
             "SELECT * FROM deliveries WHERE order_id = ? ORDER BY created_at"
         );
         $stmt->execute([$order['id']]);
-        $deliveries = $stmt->fetchAll();
+        $order['deliveries'] = $stmt->fetchAll();
 
-        $order['deliveries'] = $deliveries;
-
-        return $order;
+        return OrderResponse::fromArray($order);
     }
 
     private function generateOrderCode(): string

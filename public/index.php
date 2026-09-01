@@ -46,11 +46,13 @@ $server->set([
 $server->on('start', function (Server $server) use ($logger, $options) {
     $logger->info("Server started at http://{$server->host}:{$server->port}");
 
-    Swoole\Timer::tick($options->recoveryIntervalSec * 1000, function () {
-        /** @var RecoveryService $recoveryService */
-        $recoveryService = Container::get(RecoveryService::class);
-        $recoveryService->recoverStuckOrders();
-    });
+    /** @var RecoveryService $recoveryService */
+    $recoveryService = Container::get(RecoveryService::class);
+
+    Swoole\Timer::tick(
+        $options->recoveryIntervalSec * 1000,
+        static fn () => $recoveryService->recoverStuckOrders()
+    );
 });
 
 $server->on('request', function (Request $request, Response $response) use ($app) {

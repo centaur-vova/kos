@@ -25,14 +25,23 @@ $logger = Container::get(LoggerInterface::class);
 $storage = Container::get(StorageInterface::class);
 
 // Параметры провайдера
-$providerName = getenv('PROVIDER_NAME') ?: 'A';
+$providerName = getenv('PROVIDER_NAME') !== false ? getenv('PROVIDER_NAME') : 'A';
 $port = (int)(getenv('PROVIDER_PORT') ?: 8000);
 
 // Mock-параметры
 $errorRate = getenv('MOCK_ERROR_RATE') !== false ? (int)getenv('MOCK_ERROR_RATE') : 20;
-$timeoutRate = (int)(getenv('MOCK_TIMEOUT_RATE') ?: 10);
+$timeoutRate = getenv('MOCK_TIMEOUT_RATE') !== false ? (int)getenv('MOCK_TIMEOUT_RATE') : 10;
 $timeoutDuration = getenv('MOCK_TIMEOUT_DURATION_SEC') !== false ? (int)getenv('MOCK_TIMEOUT_DURATION_SEC') : 7;
 
+// Log provider details
+$logger->info('Provider started', [
+    'provider' => $providerName,
+    'error_rate' => $errorRate,
+    'timeout_rate' => $timeoutRate,
+    'timeout_duration' => $timeoutDuration,
+]);
+
+// Start server
 $server = new Server('0.0.0.0', $port);
 
 $server->on('request', function (Request $req, Response $res) use (
@@ -43,6 +52,14 @@ $server->on('request', function (Request $req, Response $res) use (
     $providerName,
     $logger,
 ) {
+    $logger->info('Provider request', [
+        'provider' => $providerName,
+        'uri' => $req->server['request_uri'],
+        'error_rate' => $errorRate,
+        'timeout_rate' => $timeoutRate,
+    ]);
+
+
     if ($req->server['request_uri'] !== '/issue' || $req->server['request_method'] !== 'POST') {
         $res->status(404);
         $res->end(json_encode(['status' => 'error', 'reason' => 'not_found']));
