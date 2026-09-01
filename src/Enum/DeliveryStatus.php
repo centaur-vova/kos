@@ -10,4 +10,9 @@ enum DeliveryStatus: string
     case Issued = 'issued';
     case Timeout = 'timeout';
     case Error = 'error';
+
+    public function is(self $status): bool
+    {
+        return $this === $status;
+    }
 }

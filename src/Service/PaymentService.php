@@ -4,60 +4,36 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Config\Options;
 use App\Database;
+use App\DTO\PaymentProcessingResult;
 use App\DTO\PaymentWebhook;
 use App\Enum\OrderStatus;
-use App\Enum\PaymentProcessingStatus;
-use App\Storage\StorageInterface;
-use Psr\Log\LoggerInterface;
-use Swoole\Coroutine;
 
 final readonly class PaymentService
 {
     public function __construct(
         private Database $db,
         private DeliveryService $deliveryService,
-        private StorageInterface $storage,
-        private LoggerInterface $logger,
-        private Options $options,
     ) {
     }
 
-    public function processWebhook(PaymentWebhook $webhook): array
+    public function process(PaymentWebhook $webhook): PaymentProcessingResult
+    {
+        return $this->db->transaction(function ($pdo) use ($webhook) {
+            return $this->processInTransaction($pdo, $webhook);
+        });
+    }
+
+    public function deliverByOrderCode(string $orderCode): void
+    {
+        $this->deliveryService->deliverByOrderCode($orderCode);
+    }
+
+    private function processInTransaction(\PDO $pdo, PaymentWebhook $webhook): PaymentProcessingResult
     {
         $eventId = $webhook->eventId;
         $orderCode = $webhook->orderCode;
 
-        $this->logger->info('Processing webhook', [
-            'event_id' => $eventId,
-            'order_code' => $orderCode,
-        ]);
-
-        $eventKey = "payment:event:{$eventId}";
-
-        if ($this->storage->has($eventKey)) {
-            $this->logger->info('Webhook already processed', ['event_id' => $eventId]);
-            return ['status' => PaymentProcessingStatus::AlreadyProcessed->value];
-        }
-
-        $this->storage->set($eventKey, 'processing', $this->options->paymentIdempotencyTtlSec);
-
-        $result = $this->db->transaction(function ($pdo) use ($webhook, $eventId, $orderCode) {
-            return $this->processInTransaction($pdo, $webhook, $eventId, $orderCode);
-        });
-
-        if ($result['status'] === PaymentProcessingStatus::Processed->value && $webhook->isPaid()) {
-            Coroutine::create(function () use ($orderCode) {
-                $this->deliveryService->deliverByOrderCode($orderCode);
-            });
-        }
-
-        return $result;
-    }
-
-    private function processInTransaction(\PDO $pdo, PaymentWebhook $webhook, string $eventId, string $orderCode): array
-    {
         $stmt = $pdo->prepare(
             "SELECT id, status FROM payments WHERE event_id = ?"
         );
@@ -65,10 +41,7 @@ final readonly class PaymentService
         $existingPayment = $stmt->fetch();
 
         if ($existingPayment) {
-            return [
-                'status' => PaymentProcessingStatus::AlreadyProcessed->value,
-                'payment_status' => $existingPayment['status'],
-            ];
+            return PaymentProcessingResult::alreadyProcessed($existingPayment['status']);
         }
 
         // Pessimistic lock for update
@@ -89,10 +62,7 @@ final readonly class PaymentService
                 $webhook->currency,
             ]);
 
-            return [
-                'status' => PaymentProcessingStatus::OrphanPayment->value,
-                'message' => 'Order not found, payment saved',
-            ];
+            return PaymentProcessingResult::orphanPayment('Order not found, payment saved');
         }
 
         if (OrderStatus::tryFrom($order['status']) === OrderStatus::Delivered) {
@@ -107,9 +77,7 @@ final readonly class PaymentService
                 $webhook->currency,
             ]);
 
-            return [
-                'status' => PaymentProcessingStatus::DuplicateAfterDelivery->value,
-            ];
+            return PaymentProcessingResult::duplicateAfterDelivery();
         }
 
         if (OrderStatus::tryFrom($order['status']) === OrderStatus::PaymentFailed) {
@@ -124,9 +92,7 @@ final readonly class PaymentService
                 $webhook->currency,
             ]);
 
-            return [
-                'status' => PaymentProcessingStatus::LatePaymentAfterFailure->value,
-            ];
+            return PaymentProcessingResult::latePaymentAfterFailure();
         }
 
         try {
@@ -143,9 +109,7 @@ final readonly class PaymentService
             ]);
         } catch (\PDOException $e) {
             if (($e->errorInfo[0] ?? null) === Database::UNIQUE_VIOLATION) {
-                return [
-                    'status' => PaymentProcessingStatus::AlreadyProcessedRace->value,
-                ];
+                return PaymentProcessingResult::alreadyProcessedRace();
             }
             throw $e;
         }
@@ -169,25 +133,20 @@ final readonly class PaymentService
             ]);
 
             if ($stmt->rowCount() === 1) {
-                return [
-                    'status' => PaymentProcessingStatus::Processed->value,
-                    'delivery' => 'pending',
-                ];
+                return PaymentProcessingResult::processed('pending');
             }
 
-            return [
-                'status' => PaymentProcessingStatus::ProcessedByOther->value,
-            ];
+            return PaymentProcessingResult::processedByOther();
 
         } elseif ($webhook->isFailed()) {
             $stmt = $pdo->prepare(
                 "UPDATE orders
-                 SET status = :failed_status,
-                     updated_at = NOW(),
-                     version = version + 1
-                 WHERE id = :order_id
-                 AND status = :created_status
-                 AND version = :current_version"
+             SET status = :failed_status,
+                 updated_at = NOW(),
+                 version = version + 1
+             WHERE id = :order_id
+             AND status = :created_status
+             AND version = :current_version"
             );
             $stmt->execute([
                 'failed_status' => OrderStatus::PaymentFailed->value,
@@ -196,14 +155,9 @@ final readonly class PaymentService
                 'current_version' => $order['version'],
             ]);
 
-            return [
-                'status' => PaymentProcessingStatus::Processed->value,
-                'payment_status' => 'failed',
-            ];
+            return PaymentProcessingResult::paymentFailed();
         }
 
-        return [
-            'status' => PaymentProcessingStatus::UnknownStatus->value,
-        ];
+        return PaymentProcessingResult::unknownStatus();
     }
 }

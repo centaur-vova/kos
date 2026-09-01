@@ -8,13 +8,13 @@ use App\DTO\PaymentWebhook;
 use App\Exception\DomainException;
 use App\Http\ApiResponse;
 use Swoole\Http\Request;
-use App\Service\PaymentService;
+use App\Service\WebhookProcessor;
 use Psr\Log\LoggerInterface;
 
 final readonly class WebhookController
 {
     public function __construct(
-        private PaymentService $paymentService,
+        private WebhookProcessor $webhookProcessor,
         private LoggerInterface $logger,
     ) {
     }
@@ -29,13 +29,12 @@ final readonly class WebhookController
         }
 
         try {
+            // Array payload to DTO
             $webhook = PaymentWebhook::fromArray($body);
 
-            if (!$this->validateWebhook($webhook)) {
-                return ApiResponse::error('Invalid webhook payload', 400, 'invalid_webhook');
-            }
+            // Process webhook and get result
+            $result = $this->webhookProcessor->process($webhook);
 
-            $result = $this->paymentService->processWebhook($webhook);
             return ApiResponse::success($result);
 
         } catch (DomainException $e) {
@@ -47,13 +46,5 @@ final readonly class WebhookController
             ]);
             return ApiResponse::error('Internal error', 500, 'internal_error');
         }
-    }
-
-    private function validateWebhook(PaymentWebhook $webhook): bool
-    {
-        return !empty($webhook->eventId)
-            && !empty($webhook->orderCode)
-            && !empty($webhook->status)
-            && $webhook->amount > 0;
     }
 }

@@ -97,17 +97,20 @@ final readonly class DeliveryService
             return;
         }
 
-        if ($delivery['status'] === DeliveryStatus::Issued->value) {
+        // Check delivery status
+        $deliveryStatus = DeliveryStatus::tryFrom($delivery['status']);
+
+        if ($deliveryStatus?->is(DeliveryStatus::Issued)) {
             $this->completeOrderWithCode($orderId, $delivery['code']);
             return;
         }
 
-        if ($delivery['status'] === DeliveryStatus::Timeout->value) {
+        if ($deliveryStatus?->is(DeliveryStatus::Timeout)) {
             $this->retryWithBackoff($orderId, $requestId, $delivery['provider']);
             return;
         }
 
-        if ($delivery['status'] === DeliveryStatus::Pending->value) {
+        if ($deliveryStatus?->is(DeliveryStatus::Pending)) {
             $this->logger->info('Delivery is pending, skipping', ['request_id' => $requestId]);
             return;
         }
@@ -270,9 +273,14 @@ final readonly class DeliveryService
                 "SELECT * FROM deliveries WHERE request_id = ?"
             );
             $stmt->execute([$fallbackRequestId]);
-            $delivery = $stmt->fetch();
 
-            if ($delivery && $delivery['status'] === DeliveryStatus::Issued->value) {
+            $delivery = $stmt->fetch();
+            if (!$delivery) {
+                return;
+            }
+
+            $deliveryStatus = DeliveryStatus::tryFrom($delivery['status']);
+            if ($deliveryStatus?->is(DeliveryStatus::Issued)) {
                 $this->completeOrderWithCode($orderId, $delivery['code']);
             }
             return;

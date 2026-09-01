@@ -14,6 +14,7 @@ final readonly class PaymentWebhook
         public readonly string $currency = 'RUB',
         public readonly ?\DateTimeImmutable $createdAt = null,
     ) {
+        $this->validate();
     }
 
     public static function fromArray(array $data): self
@@ -23,9 +24,9 @@ final readonly class PaymentWebhook
         }
 
         return new self(
-            eventId: $data['event_id'],
-            orderCode: $data['order_id'],
-            status: $data['status'],
+            eventId: (string)$data['event_id'],
+            orderCode: (string)$data['order_id'],
+            status: (string)$data['status'],
             amount: (float)$data['amount'],
             currency: $data['currency'] ?? 'RUB',
             createdAt: isset($data['created_at'])
@@ -42,5 +43,24 @@ final readonly class PaymentWebhook
     public function isFailed(): bool
     {
         return $this->status === 'failed';
+    }
+
+    private function validate(): void
+    {
+        if (empty($this->eventId)) {
+            throw new \InvalidArgumentException('event_id is required');
+        }
+
+        if (empty($this->orderCode)) {
+            throw new \InvalidArgumentException('order_id is required');
+        }
+
+        if (empty($this->status)) {
+            throw new \InvalidArgumentException('status is required');
+        }
+
+        if ($this->amount <= 0) {
+            throw new \InvalidArgumentException('amount must be positive');
+        }
     }
 }
