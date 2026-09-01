@@ -37,6 +37,7 @@ make test
 Или отдельные тесты:
 
 ```bash
+make test-unit       # unit тесты
 make test-race       # 50 параллельных вебхуков
 make test-timeout    # таймаут провайдера
 make test-fallback   # fallback A -> B
@@ -91,14 +92,14 @@ make reset-stock
 
 ```
 src/
-├── Controller/     # HTTP контроллеры
-├── Service/        # Бизнес-логика
-├── Storage/        # Хранилище (Swoole Table)
-├── Config/         # Конфигурация
-├── DTO/            # Data Transfer Objects
-├── Enum/           # Перечисления
-├── Exception/      # Доменные исключения
-└── Support/        # Логгер
+├── Controller/ # HTTP контроллеры
+├── Service/    # Бизнес-логика (PaymentService, WebhookProcessor, DeliveryService)
+├── Storage/    # Хранилище (Swoole Table)
+├── Config/     # Конфигурация
+├── DTO/        # Data Transfer Objects (PaymentWebhook, OrderResponse, etc.)
+├── Enum/       # Перечисления со статусами
+├── Exception/  # Доменные исключения
+└── Support/    # Логгер (StdoutLogger)
 ```
 
 ## Известные ограничения MVP

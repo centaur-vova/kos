@@ -17,13 +17,8 @@
     },
     "autoload": {
         "psr-4": {
-            "App\\": "src/"
+            "App\\": "src/",
+            "App\\Tests\\": "tests/"
         }
-    },
-    "scripts": {
-        "test": "phpunit",
-        "start": "php public/index.php",
-        "mock-provider-a": "php mock/providers/provider-a.php",
-        "mock-provider-b": "php mock/providers/provider-b.php"
     }
 }

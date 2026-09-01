@@ -1,4 +1,5 @@
 .PHONY: \
+	app-shell \
 	up \
 	down \
 	restart \
@@ -11,12 +12,16 @@
 	test-reconciliation \
 	test-recovery \
 	test-catalog \
+	test-unit \
 	reset-stock \
 	empty-stock \
 	clean-orders \
 	clean
 
 # Запуск
+app-shell:
+	docker compose exec app sh
+
 up:
 	docker compose up -d
 
@@ -33,7 +38,10 @@ ps:
 	docker compose ps
 
 # Тесты
-test: reset-stock test-race test-timeout test-fallback test-reconciliation test-recovery test-catalog
+test: reset-stock test-unit test-race test-timeout test-fallback test-reconciliation test-recovery test-catalog
+
+test-unit:
+	docker compose exec app vendor/bin/phpunit
 
 test-race:
 	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=0 docker compose up -d --force-recreate provider-a

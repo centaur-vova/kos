@@ -1,5 +1,4 @@
 vendor/
 .env
 .git/
-tests/
 *.md

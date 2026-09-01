@@ -38,7 +38,7 @@ WORKDIR /app
 
 # Copy composer.json first for caching purposes
 COPY composer.json composer.lock* ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs
+RUN composer install --optimize-autoloader --no-interaction --ignore-platform-reqs
 
 # Copy sources
 COPY . .
