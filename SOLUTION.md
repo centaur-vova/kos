@@ -165,8 +165,10 @@
 
 ## Масштабирование
 
-- Горизонтально: несколько инстансов API + балансировщик
-- PostgreSQL: реплики для чтения
-- Swoole Table → Redis для multi-node
-- Очереди: NATS/RabbitMQ для фоновых задач
-- Мониторинг: Prometheus + Grafana
+- **Каталог**: кэш в Redis/Swoole Table + инвалидация по TTL
+- **API**: несколько инстансов + балансировщик
+- **PostgreSQL**: реплики для чтения
+- **Swoole Table → Redis** для multi-node синхронизации
+- **Очереди**: NATS/RabbitMQ для фоновых задач
+- **Мониторинг**: Prometheus + Grafana
+
