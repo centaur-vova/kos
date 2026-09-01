@@ -1,5 +1,10 @@
 # Game Shop Backend
 
+![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?style=flat&logo=php&logoColor=white)
+![Swoole](https://img.shields.io/badge/Swoole-6.2-8DD6F9?style=flat&logo=swoole&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat&logo=postgresql&logoColor=white)
+![Tests](https://github.com/centaur-vova/kos/workflows/Tests/badge.svg)
+
 Ядро магазина цифровых товаров для геймеров: платежи, каталог, интеграции с поставщиками, автоматическая доставка.
 
 ## Технологии
