@@ -37,11 +37,25 @@ final class ProviderMockController
         // Настройка провайдера
         if ($req->server['request_uri'] === '/configure' && $req->server['request_method'] === 'POST') {
             $body = json_decode($req->getContent(), true);
-            $config = ProviderMockConfig::fromArray(is_array($body) ? $body : []);
+            $body = is_array($body) ? $body : [];
 
-            $storage->set('provider:config', $config->toJson());
+            $logger->info('Received new config body', [$body]);
 
-            $logger->info('Provider configured', $config->toArray());
+            // Читаем текущий конфиг ДЛЯ ЭТОГО провайдера
+            $key = "provider:config:{$this->providerName}";
+            $currentJson = $storage->get($key);
+            $currentConfig = $currentJson ? ProviderMockConfig::fromJson($currentJson) : new ProviderMockConfig();
+
+            // Мержим с новыми данными
+            $config = $currentConfig->merge($body);
+
+            $logger->info('Updating config', [
+                'provider' => $this->providerName,
+                'config' => $config->toArray(),
+            ]);
+
+            // Сохраняем ДЛЯ ЭТОГО провайдера
+            $storage->set($key, $config->toJson());
 
             $this->jsonResponse($res, 200, ['status' => 'ok']);
             return;
@@ -69,13 +83,25 @@ final class ProviderMockController
         }
 
         // Читаем конфиг из Shared Memory
-        $configJson = $storage->get('provider:config');
+        $key = "provider:config:{$this->providerName}";
+        $configJson = $storage->get($key);
         $config = $configJson ? ProviderMockConfig::fromJson($configJson) : new ProviderMockConfig();
+
+        $logger->info("Read config", [
+            'providerName' => $this->providerName,
+            'config' => $config->toArray(),
+        ]);
 
         // Блокировка SKU
         if ($config->isSkuBlocked($sku)) {
             $logger->info('SKU blocked', ['sku' => $sku]);
             $this->jsonResponse($res, 200, ['status' => 'error', 'reason' => 'out_of_stock']);
+            return;
+        }
+
+        if ($config->forceDuplicateCode !== null) {
+            $logger->warning('Force duplicate code', ['request_id' => $requestId, 'code' => $config->forceDuplicateCode]);
+            $this->jsonResponse($res, 200, ['status' => 'ok', 'request_id' => $requestId, 'code' => $config->forceDuplicateCode]);
             return;
         }
 
