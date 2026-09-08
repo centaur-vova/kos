@@ -25,6 +25,8 @@ interface OrderItemRepository
 
     public function findByDeliveredCode(string $code): ?array;
 
+    public function findUnfinishedByOrderId(string $orderId): array;
+
     public function updateStatus(string $itemId, OrderItemStatus $status): void;
 
     public function markDelivered(string $itemId, string $code, string $provider, string $requestId): void;

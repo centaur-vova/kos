@@ -77,6 +77,21 @@ final readonly class PostgresOrderItemRepository implements OrderItemRepository
         });
     }
 
+    public function findUnfinishedByOrderId(string $orderId): array
+    {
+        return $this->db->withConnection(function (PDO|PDOProxy $pdo) use ($orderId) {
+            // Забираем и 'pending' (новые), и 'delivering' (застрявшие при аварии)
+            $stmt = $pdo->prepare(
+                "SELECT * FROM order_items
+             WHERE order_id = ?
+             AND status IN ('pending', 'delivering')"
+            );
+            $stmt->execute([$orderId]);
+            return $stmt->fetchAll();
+        });
+    }
+
+
     public function updateStatus(string $itemId, OrderItemStatus $status): void
     {
         $this->db->withConnection(function (PDO|PDOProxy $pdo) use ($itemId, $status) {
