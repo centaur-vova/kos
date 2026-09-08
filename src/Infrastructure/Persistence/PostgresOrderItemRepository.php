@@ -68,6 +68,15 @@ final readonly class PostgresOrderItemRepository implements OrderItemRepository
         });
     }
 
+    public function findByDeliveredCode(string $code): ?array
+    {
+        return $this->db->withConnection(function (PDO|PDOProxy $pdo) use ($code) {
+            $stmt = $pdo->prepare("SELECT * FROM order_items WHERE delivered_code = ?");
+            $stmt->execute([$code]);
+            return $stmt->fetch() ?: null;
+        });
+    }
+
     public function updateStatus(string $itemId, OrderItemStatus $status): void
     {
         $this->db->withConnection(function (PDO|PDOProxy $pdo) use ($itemId, $status) {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App;
 
 use App\Config\Options;
+use App\Controller\ProviderMockController;
 use App\Domain\Repository\OrderItemRepository;
 use App\Domain\Repository\OrderRepository;
 use App\Domain\Repository\PaymentRepository;
@@ -24,6 +25,7 @@ use App\Storage\StorageInterface;
 use App\Storage\SwooleTableStorage;
 use App\Support\StdoutLogger;
 
+use function DI\autowire;
 use function DI\get;
 
 final class Container
@@ -55,6 +57,9 @@ final class Container
             PaymentRepository::class => get(PostgresPaymentRepository::class),
             ProductRepository::class => get(PostgresProductRepository::class),
             ReconciliationRepository::class => get(PostgresReconciliationRepository::class),
+
+            // Controller(s)
+            ProviderMockController::class => autowire(ProviderMockController::class),
         ]);
 
         self::$container = $builder->build();

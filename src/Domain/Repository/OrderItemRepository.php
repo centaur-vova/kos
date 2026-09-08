@@ -23,6 +23,8 @@ interface OrderItemRepository
     /** @return array<int, array<string, mixed>> */
     public function findRefundsByOrderId(string $orderId): array;
 
+    public function findByDeliveredCode(string $code): ?array;
+
     public function updateStatus(string $itemId, OrderItemStatus $status): void;
 
     public function markDelivered(string $itemId, string $code, string $provider, string $requestId): void;

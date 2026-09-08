@@ -18,6 +18,7 @@
 	test-partial-failure \
 	test-dishonest-provider \
 	test-order \
+	test-dishonest-provider \
 	reset-stock \
 	empty-stock \
 	clean-orders \
@@ -91,11 +92,16 @@ test-multi-item:
 test-partial-failure:
 	./scripts/test-partial-failure.sh
 
-test-dishonest-provider:
-	./scripts/test-dishonest-provider.sh
-
 test-order: reset-stock
 	./scripts/test-multi-item.sh
+
+test-dishonest-provider:
+	MOCK_DUPLICATE_RATE_A=100 MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=0 docker compose up -d --force-recreate provider-a
+	MOCK_ERROR_RATE_B=0 MOCK_TIMEOUT_RATE_B=0 docker compose up -d --force-recreate provider-b
+	sleep 2
+	./scripts/test-multi-item.sh
+	docker compose up -d --force-recreate provider-a provider-b
+	sleep 2
 
 # Очистка системы
 reset-stock:

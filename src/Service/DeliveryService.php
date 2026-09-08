@@ -84,9 +84,23 @@ final readonly class DeliveryService
             );
 
             if ($result['status'] === 'ok') {
+                $code = $result['code'];
+
+                if (!$this->validateCode($code, $item['sku'])) {
+                    $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::DeliveryFailed);
+                    $this->logger->critical('Suspicious code from provider', [
+                        'provider' => $provider,
+                        'code' => $code,
+                    ]);
+
+                    // Вызываем fallback!
+                    $this->tryFallback($item, $provider);
+                    return;
+                }
+
                 $this->orderItemRepository->markDelivered(
                     $item['id'],
-                    $result['code'],
+                    $code,
                     $provider,
                     $requestId,
                 );
@@ -147,9 +161,17 @@ final readonly class DeliveryService
                 );
 
                 if ($result['status'] === 'ok') {
+                    $code = $result['code'];
+
+                    if (!$this->validateCode($code, $item['sku'])) {
+                        $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::DeliveryFailed);
+                        $this->tryFallback($item, $provider);
+                        return;
+                    }
+
                     $this->orderItemRepository->markDelivered(
                         $item['id'],
-                        $result['code'],
+                        $code,
                         $provider,
                         $requestId,
                     );
@@ -220,5 +242,41 @@ final readonly class DeliveryService
             $this->refundRepository->createForItem($item['id'], (int)$item['price_cents']);
             $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::Refunded);
         }
+    }
+
+    private function validateCode(string $code, string $sku): bool
+    {
+        // Проверяем дубликат
+        $existing = $this->orderItemRepository->findByDeliveredCode($code);
+
+        if ($existing) {
+            $this->logger->error('Duplicate code detected', [
+                'code' => $code,
+                'existing_item_id' => $existing['id'] ?? null,
+            ]);
+            return false;
+        }
+
+        // Проверяем формат кода по типу товара
+        if (!$this->isValidCodeFormat($code, $sku)) {
+            $this->logger->error('Invalid code format', [
+                'code' => $code,
+                'sku' => $sku,
+            ]);
+            return false;
+        }
+
+        return true;
+    }
+
+    private function isValidCodeFormat(string $code, string $sku): bool
+    {
+        // Для topup/giftcard — код начинается с TOPUP-
+        if (str_starts_with($sku, 'STEAM-TOPUP') || str_starts_with($sku, 'GIFT-')) {
+            return str_starts_with($code, 'TOPUP-');
+        }
+
+        // Для key — формат XXXX-XXXX-XXXX
+        return (bool)preg_match('/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/', $code);
     }
 }
