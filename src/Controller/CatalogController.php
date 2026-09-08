@@ -21,4 +21,11 @@ final readonly class CatalogController
 
         return ApiResponse::success(['products' => $products]);
     }
+
+    public function resetStock(Request $request, array $params): ApiResponse
+    {
+        $this->catalogService->resetStock();
+
+        return ApiResponse::success();
+    }
 }

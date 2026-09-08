@@ -7,18 +7,11 @@
 	logs \
 	ps \
 	test \
-	test-race \
-	test-timeout \
-	test-fallback \
+	test-unit \
+	behat \
 	test-reconciliation \
 	test-recovery \
 	test-catalog \
-	test-unit \
-	test-multi-item \
-	test-partial-failure \
-	test-dishonest-provider \
-	test-order \
-	test-dishonest-provider \
 	reset-stock \
 	empty-stock \
 	clean-orders \
@@ -47,34 +40,13 @@ ps:
 	docker compose ps
 
 # Тесты
-test: reset-stock test-unit test-race test-timeout test-fallback test-reconciliation test-recovery test-catalog test-multi-item test-partial-failure test-dishonest-provider
+test: reset-stock test-unit behat test-reconciliation test-recovery test-catalog
 
 test-unit:
 	docker compose exec app vendor/bin/phpunit
 
-test-race:
-	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=0 docker compose up -d --force-recreate provider-a
-	MOCK_ERROR_RATE_B=0 MOCK_TIMEOUT_RATE_B=0 docker compose up -d --force-recreate provider-b
-	sleep 2
-	./scripts/test-race.sh
-	docker compose up -d --force-recreate provider-a provider-b
-	sleep 2
-
-test-timeout:
-	MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=100 docker compose up -d --force-recreate provider-a
-	sleep 2
-	./scripts/test-timeout.sh
-	docker compose up -d --force-recreate provider-a
-	sleep 2
-
-test-fallback:
-	MOCK_ERROR_RATE_A=100 MOCK_TIMEOUT_RATE_A=0 docker compose up -d --force-recreate provider-a
-	sleep 2
-	MOCK_ERROR_RATE_B=0 MOCK_TIMEOUT_RATE_B=0 docker compose up -d --force-recreate provider-b
-	sleep 2
-	./scripts/test-fallback.sh
-	docker compose up -d --force-recreate provider-a provider-b
-	sleep 2
+behat:
+	docker compose exec app vendor/bin/behat
 
 test-reconciliation:
 	./scripts/test-reconciliation.sh
@@ -84,24 +56,6 @@ test-recovery:
 
 test-catalog:
 	./scripts/test-catalog.sh
-
-# Тесты второго этапа
-test-multi-item:
-	./scripts/test-multi-item.sh
-
-test-partial-failure:
-	./scripts/test-partial-failure.sh
-
-test-order: reset-stock
-	./scripts/test-multi-item.sh
-
-test-dishonest-provider:
-	MOCK_DUPLICATE_RATE_A=100 MOCK_ERROR_RATE_A=0 MOCK_TIMEOUT_RATE_A=0 docker compose up -d --force-recreate provider-a
-	MOCK_ERROR_RATE_B=0 MOCK_TIMEOUT_RATE_B=0 docker compose up -d --force-recreate provider-b
-	sleep 2
-	./scripts/test-multi-item.sh
-	docker compose up -d --force-recreate provider-a provider-b
-	sleep 2
 
 # Очистка системы
 reset-stock:

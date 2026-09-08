@@ -17,4 +17,9 @@ final readonly class CatalogService
     {
         return $this->productRepository->findAvailable();
     }
+
+    public function resetStock(): void
+    {
+        $this->productRepository->resetStock();
+    }
 }

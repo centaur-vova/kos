@@ -12,13 +12,13 @@ use Psr\Log\LoggerInterface;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-// 2. Инициализация и запуск сервера остаются чистыми и легковесными
+// Инициализация и запуск сервера остаются чистыми и легковесными
 $options = Bootstrap::init(__DIR__ . '/..');
 $port = (int)(getenv('PROVIDER_PORT') ?: 8000);
 
 $server = new Server('0.0.0.0', $port);
 $server->set([
-    'worker_num' => 2,
+    'worker_num' => 1,
     'enable_coroutine' => true,
 ]);
 

@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Exception\Provider\ProviderException;
 use App\Exception\Provider\ProviderTimeoutException;
 use App\Config\Options;
+use Swoole\Coroutine;
 use Swoole\Coroutine\Http\Client;
 
 final readonly class ProviderClient

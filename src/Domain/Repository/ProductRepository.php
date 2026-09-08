@@ -8,4 +8,6 @@ interface ProductRepository
 {
     /** @return array<int, array<string, mixed>> */
     public function findAvailable(): array;
+
+    public function resetStock(): void;
 }
