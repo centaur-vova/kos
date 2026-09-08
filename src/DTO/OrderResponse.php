@@ -6,10 +6,14 @@ namespace App\DTO;
 
 final readonly class OrderResponse implements \JsonSerializable
 {
+    /**
+     * @param DeliveryResponse[] $deliveries
+     * @param OrderItemResponse[] $items
+     * @param array $refunds
+     */
     public function __construct(
         public string $id,
         public string $orderCode,
-        public string $sku,
         public string $userId,
         public string $status,
         public float $price,
@@ -21,8 +25,9 @@ final readonly class OrderResponse implements \JsonSerializable
         public ?\DateTimeImmutable $paidAt = null,
         public ?\DateTimeImmutable $deliveredAt = null,
         public int $version = 0,
-        /** @var DeliveryResponse[] */
         public array $deliveries = [],
+        public array $items = [],
+        public array $refunds = [],
     ) {
     }
 
@@ -33,14 +38,18 @@ final readonly class OrderResponse implements \JsonSerializable
             $order['deliveries'] ?? [],
         );
 
+        $items = array_map(
+            static fn (array $item) => OrderItemResponse::fromArray($item),
+            $order['items'] ?? [],
+        );
+
         return new self(
-            id: $order['id'],
-            orderCode: $order['order_code'],
-            sku: $order['sku'],
-            userId: $order['user_id'],
-            status: $order['status'],
-            price: (float)$order['price'],
-            currency: $order['currency'],
+            id: (string)$order['id'],
+            orderCode: (string)$order['order_code'],
+            userId: (string)$order['user_id'],
+            status: (string)$order['status'],
+            price: (float)($order['price_cents'] ?? 0) / 100,
+            currency: (string)$order['currency'],
             deliveredCode: $order['delivered_code'] ?? null,
             provider: $order['provider'] ?? null,
             providerRequestId: $order['provider_request_id'] ?? null,
@@ -49,6 +58,8 @@ final readonly class OrderResponse implements \JsonSerializable
             deliveredAt: isset($order['delivered_at']) ? new \DateTimeImmutable($order['delivered_at']) : null,
             version: (int)$order['version'],
             deliveries: $deliveries,
+            items: $items,
+            refunds: $order['refunds'] ?? [],
         );
     }
 
@@ -57,7 +68,6 @@ final readonly class OrderResponse implements \JsonSerializable
         return [
             'id' => $this->id,
             'order_code' => $this->orderCode,
-            'sku' => $this->sku,
             'user_id' => $this->userId,
             'status' => $this->status,
             'price' => $this->price,
@@ -70,6 +80,8 @@ final readonly class OrderResponse implements \JsonSerializable
             'delivered_at' => $this->deliveredAt?->format('c'),
             'version' => $this->version,
             'deliveries' => $this->deliveries,
+            'items' => $this->items,
+            'refunds' => $this->refunds,
         ];
     }
 }

@@ -4,63 +4,39 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Database;
+use App\Domain\Repository\OrderRepository;
+use App\Domain\Repository\OrderItemRepository;
+use App\DTO\OrderItem;
 use App\DTO\OrderResponse;
 use Psr\Log\LoggerInterface;
 
 final readonly class OrderService
 {
     public function __construct(
-        private Database $db,
+        private OrderRepository $orderRepository,
+        private OrderItemRepository $orderItemRepository,
         private LoggerInterface $logger,
     ) {
     }
 
-    public function create(string $sku, string $userId): OrderResponse
+    /**
+     * @param OrderItem[] $items
+     */
+    public function create(string $userId, array $items): OrderResponse
     {
-        $this->logger->info('Creating order', ['sku' => $sku, 'user_id' => $userId]);
+        $this->logger->info('Creating order', [
+            'user_id' => $userId,
+            'items_count' => count($items),
+        ]);
 
-        $order = $this->db->transaction(function ($pdo) use ($sku, $userId) {
-            // Получаем товар
-            $stmt = $pdo->prepare("SELECT * FROM products WHERE sku = ? FOR UPDATE");
-            $stmt->execute([$sku]);
-            $product = $stmt->fetch();
+        if (empty($items)) {
+            throw new \RuntimeException('Order must contain at least one item');
+        }
 
-            if (!$product) {
-                throw new \RuntimeException('Product not found');
-            }
+        $order = $this->orderRepository->createWithItems($userId, $items);
 
-            if ($product['stock'] <= $product['reserved']) {
-                throw new \RuntimeException('Out of stock');
-            }
-
-            // Создаём заказ
-            $orderCode = $this->generateOrderCode();
-
-            $stmt = $pdo->prepare(
-                "INSERT INTO orders (order_code, sku, user_id, price, currency)
-                 VALUES (?, ?, ?, ?, ?)
-                 RETURNING *"
-            );
-            $stmt->execute([
-                $orderCode,
-                $sku,
-                $userId,
-                $product['price'],
-                $product['currency'],
-            ]);
-
-            $order = $stmt->fetch();
-
-            // Резервируем товар
-            $stmt = $pdo->prepare(
-                "UPDATE products SET reserved = reserved + 1, updated_at = NOW()
-                 WHERE sku = ?"
-            );
-            $stmt->execute([$sku]);
-
-            return $order;
-        });
+        // Подгружаем позиции
+        $order['items'] = $this->orderItemRepository->findByOrderId($order['id']);
 
         $this->logger->info('Order created', ['order_code' => $order['order_code']]);
 
@@ -69,36 +45,23 @@ final readonly class OrderService
 
     public function getById(string $orderId): ?OrderResponse
     {
-        $pdo = $this->db->getConnection();
-
-        // Если начинается с 'ord_' — ищем по order_code
-        if (str_starts_with($orderId, 'ord_')) {
-            $stmt = $pdo->prepare("SELECT * FROM orders WHERE order_code = ?");
-            $stmt->execute([$orderId]);
-        } else {
-            // Иначе — по id (UUID)
-            $stmt = $pdo->prepare("SELECT * FROM orders WHERE id = ?");
-            $stmt->execute([$orderId]);
-        }
-
-        $order = $stmt->fetch();
+        $order = str_starts_with($orderId, 'ord_')
+            ? $this->orderRepository->findByOrderCode($orderId)
+            : $this->orderRepository->findById($orderId);
 
         if (!$order) {
             return null;
         }
 
-        // Добавляем информацию о выдаче
-        $stmt = $pdo->prepare(
-            "SELECT * FROM deliveries WHERE order_id = ? ORDER BY created_at"
-        );
-        $stmt->execute([$order['id']]);
-        $order['deliveries'] = $stmt->fetchAll();
+        // Подгружаем позиции
+        $order['items'] = $this->orderItemRepository->findByOrderId($order['id']);
+
+        // Подгружаем доставки
+        $order['deliveries'] = $this->orderItemRepository->findDeliveriesByOrderId($order['id']);
+
+        // Подгружаем возвраты
+        $order['refunds'] = $this->orderItemRepository->findRefundsByOrderId($order['id']);
 
         return OrderResponse::fromArray($order);
-    }
-
-    private function generateOrderCode(): string
-    {
-        return 'ord_' . bin2hex(random_bytes(8));
     }
 }

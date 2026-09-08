@@ -1,5 +1,6 @@
 .PHONY: \
 	app-shell \
+	db-shell \
 	up \
 	down \
 	restart \
@@ -13,6 +14,10 @@
 	test-recovery \
 	test-catalog \
 	test-unit \
+	test-multi-item \
+	test-partial-failure \
+	test-dishonest-provider \
+	test-order \
 	reset-stock \
 	empty-stock \
 	clean-orders \
@@ -21,6 +26,9 @@
 # Запуск
 app-shell:
 	docker compose exec app sh
+
+db-shell:
+	docker compose exec postgres psql -U app -d game_shop
 
 up:
 	docker compose up -d
@@ -38,7 +46,7 @@ ps:
 	docker compose ps
 
 # Тесты
-test: reset-stock test-unit test-race test-timeout test-fallback test-reconciliation test-recovery test-catalog
+test: reset-stock test-unit test-race test-timeout test-fallback test-reconciliation test-recovery test-catalog test-multi-item test-partial-failure test-dishonest-provider
 
 test-unit:
 	docker compose exec app vendor/bin/phpunit
@@ -76,6 +84,19 @@ test-recovery:
 test-catalog:
 	./scripts/test-catalog.sh
 
+# Тесты второго этапа
+test-multi-item:
+	./scripts/test-multi-item.sh
+
+test-partial-failure:
+	./scripts/test-partial-failure.sh
+
+test-dishonest-provider:
+	./scripts/test-dishonest-provider.sh
+
+test-order: reset-stock
+	./scripts/test-multi-item.sh
+
 # Очистка системы
 reset-stock:
 	docker compose exec postgres psql -U app -d game_shop -c "UPDATE products SET stock = 1000, reserved = 0;"
@@ -85,6 +106,6 @@ empty-stock:
 	docker compose exec postgres psql -U app -d game_shop -c "UPDATE products SET stock = 0, reserved = 0;"
 
 clean-orders:
-	docker compose exec postgres psql -U app -d game_shop -c "TRUNCATE deliveries, payments, orders RESTART IDENTITY CASCADE; UPDATE products SET reserved = 0;"
+	docker compose exec postgres psql -U app -d game_shop -c "TRUNCATE deliveries, payments, refunds, order_items, order_events, supplier_queue, orders RESTART IDENTITY CASCADE; UPDATE products SET reserved = 0;"
 
 clean: reset-stock clean-orders

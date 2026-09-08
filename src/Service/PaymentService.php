@@ -4,160 +4,102 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Database;
+use App\Domain\Repository\OrderRepository;
+use App\Domain\Repository\PaymentRepository;
 use App\DTO\PaymentProcessingResult;
 use App\DTO\PaymentWebhook;
 use App\Enum\OrderStatus;
+use Psr\Log\LoggerInterface;
 
 final readonly class PaymentService
 {
     public function __construct(
-        private Database $db,
+        private OrderRepository $orderRepository,
+        private PaymentRepository $paymentRepository,
         private DeliveryService $deliveryService,
+        private LoggerInterface $logger,
     ) {
     }
 
     public function process(PaymentWebhook $webhook): PaymentProcessingResult
     {
-        return $this->db->transaction(function ($pdo) use ($webhook) {
-            return $this->processInTransaction($pdo, $webhook);
-        });
-    }
+        $this->logger->info('Processing payment', [
+            'event_id' => $webhook->eventId,
+            'order_code' => $webhook->orderCode,
+        ]);
 
-    public function deliverByOrderCode(string $orderCode): void
-    {
-        $this->deliveryService->deliverByOrderCode($orderCode);
-    }
-
-    private function processInTransaction(\PDO $pdo, PaymentWebhook $webhook): PaymentProcessingResult
-    {
-        $eventId = $webhook->eventId;
-        $orderCode = $webhook->orderCode;
-
-        $stmt = $pdo->prepare(
-            "SELECT id, status FROM payments WHERE event_id = ?"
-        );
-        $stmt->execute([$eventId]);
-        $existingPayment = $stmt->fetch();
-
-        if ($existingPayment) {
-            return PaymentProcessingResult::alreadyProcessed($existingPayment['status']);
+        // Проверяем идемпотентность
+        if ($this->paymentRepository->exists($webhook->eventId)) {
+            return PaymentProcessingResult::alreadyProcessed('already_processed');
         }
 
-        // Pessimistic lock for update
-        $stmt = $pdo->prepare(
-            "SELECT * FROM orders WHERE order_code = ? FOR UPDATE"
-        );
-        $stmt->execute([$orderCode]);
-        $order = $stmt->fetch();
+        // Блокируем заказ
+        $order = $this->orderRepository->findByOrderCodeForUpdate($webhook->orderCode);
 
         if (!$order) {
-            $stmt = $pdo->prepare(
-                "INSERT INTO payments (event_id, status, amount, currency)
-             VALUES (?, 'orphan', ?, ?)"
-            );
-            $stmt->execute([
-                $eventId,
-                $webhook->amount,
-                $webhook->currency,
-            ]);
-
-            return PaymentProcessingResult::orphanPayment('Order not found, payment saved');
+            $this->paymentRepository->saveOrphan($webhook);
+            return PaymentProcessingResult::orphanPayment('Order not found');
         }
 
-        if (OrderStatus::tryFrom($order['status']) === OrderStatus::Delivered) {
-            $stmt = $pdo->prepare(
-                "INSERT INTO payments (event_id, order_id, status, amount, currency)
-             VALUES (?, ?, 'duplicate_after_delivery', ?, ?)"
-            );
-            $stmt->execute([
-                $eventId,
-                $order['id'],
-                $webhook->amount,
-                $webhook->currency,
-            ]);
+        // Проверяем статус заказа
+        $currentStatus = OrderStatus::tryFrom($order['status']);
 
+        if ($currentStatus === OrderStatus::Delivered) {
+            $this->paymentRepository->saveDuplicate($webhook, $order['id']);
             return PaymentProcessingResult::duplicateAfterDelivery();
         }
 
-        if (OrderStatus::tryFrom($order['status']) === OrderStatus::PaymentFailed) {
-            $stmt = $pdo->prepare(
-                "INSERT INTO payments (event_id, order_id, status, amount, currency)
-             VALUES (?, ?, 'late_payment', ?, ?)"
-            );
-            $stmt->execute([
-                $eventId,
-                $order['id'],
-                $webhook->amount,
-                $webhook->currency,
-            ]);
-
+        if ($currentStatus === OrderStatus::PaymentFailed) {
+            $this->paymentRepository->saveLate($webhook, $order['id']);
             return PaymentProcessingResult::latePaymentAfterFailure();
         }
 
+        // Сохраняем платёж
         try {
-            $stmt = $pdo->prepare(
-                "INSERT INTO payments (event_id, order_id, status, amount, currency)
-             VALUES (?, ?, ?, ?, ?)"
-            );
-            $stmt->execute([
-                $eventId,
-                $order['id'],
-                $webhook->status,
-                $webhook->amount,
-                $webhook->currency,
-            ]);
+            $this->paymentRepository->save($webhook, $order['id']);
         } catch (\PDOException $e) {
-            if (($e->errorInfo[0] ?? null) === Database::UNIQUE_VIOLATION) {
+            if (($e->errorInfo[0] ?? null) === '23505') {
                 return PaymentProcessingResult::alreadyProcessedRace();
             }
             throw $e;
         }
 
+        // Обновляем статус заказа
         if ($webhook->isPaid()) {
-            $stmt = $pdo->prepare(
-                "UPDATE orders
-             SET status = :paid_status,
-                 paid_at = NOW(),
-                 updated_at = NOW(),
-                 version = version + 1
-             WHERE id = :order_id
-             AND status = :created_status
-             AND version = :current_version"
+            $updated = $this->orderRepository->updateStatusOptimistic(
+                $order['id'],
+                OrderStatus::Paid,
+                OrderStatus::Created,
+                $order['version'],
             );
-            $stmt->execute([
-                'paid_status' => OrderStatus::Paid->value,
-                'order_id' => $order['id'],
-                'created_status' => OrderStatus::Created->value,
-                'current_version' => $order['version'],
-            ]);
 
-            if ($stmt->rowCount() === 1) {
+            if ($updated) {
                 return PaymentProcessingResult::processed('pending');
             }
 
             return PaymentProcessingResult::processedByOther();
+        }
 
-        } elseif ($webhook->isFailed()) {
-            $stmt = $pdo->prepare(
-                "UPDATE orders
-             SET status = :failed_status,
-                 updated_at = NOW(),
-                 version = version + 1
-             WHERE id = :order_id
-             AND status = :created_status
-             AND version = :current_version"
+        if ($webhook->isFailed()) {
+            $this->orderRepository->updateStatusOptimistic(
+                $order['id'],
+                OrderStatus::PaymentFailed,
+                OrderStatus::Created,
+                $order['version'],
             );
-            $stmt->execute([
-                'failed_status' => OrderStatus::PaymentFailed->value,
-                'order_id' => $order['id'],
-                'created_status' => OrderStatus::Created->value,
-                'current_version' => $order['version'],
-            ]);
 
             return PaymentProcessingResult::paymentFailed();
         }
 
         return PaymentProcessingResult::unknownStatus();
+    }
+
+    public function deliverByOrderCode(string $orderCode): void
+    {
+        $order = $this->orderRepository->findByOrderCode($orderCode);
+
+        if ($order) {
+            $this->deliveryService->deliver($order['id']);
+        }
     }
 }

@@ -16,8 +16,8 @@ final readonly class WebhookProcessor
     public function __construct(
         private PaymentService $paymentService,
         private StorageInterface $storage,
-        private LoggerInterface $logger,
         private Options $options,
+        private LoggerInterface $logger,
     ) {
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\OrderItem;
 use App\Http\ApiResponse;
 use Swoole\Http\Request;
 use App\Service\OrderService;
@@ -22,28 +23,30 @@ final readonly class OrderController
         $content = $request->getContent();
         $body = $content ? json_decode($content, true) : null;
 
-        if (!is_array($body)) {
-            return ApiResponse::error('Invalid JSON payload', 400, 'invalid_json');
+        if (!is_array($body) || !isset($body['user_id'], $body['items'])) {
+            return ApiResponse::error('Invalid payload: user_id and items required', 400, 'invalid_payload');
         }
 
-        $sku = $body['sku'] ?? null;
-        $userId = $body['user_id'] ?? null;
-
-        if (!$sku || !$userId) {
-            return ApiResponse::error('Missing required fields: sku, user_id', 400, 'missing_fields');
+        $items = [];
+        foreach ($body['items'] as $itemData) {
+            if (!is_array($itemData) || !isset($itemData['sku'])) {
+                return ApiResponse::error('Each item must have sku', 400, 'invalid_item');
+            }
+            $items[] = OrderItem::fromArray($itemData);
         }
 
         try {
-            $this->logger->info('Creating order', ['sku' => $sku, 'user_id' => $userId]);
-            $order = $this->orderService->create($sku, $userId);
+            $this->logger->info('Creating order', [
+                'user_id' => $body['user_id'],
+                'items_count' => count($items),
+            ]);
+
+            $order = $this->orderService->create($body['user_id'], $items);
 
             return ApiResponse::success(['order' => $order], 201);
 
         } catch (\RuntimeException $e) {
-            $this->logger->error('Order creation failed', [
-                'error' => $e->getMessage(),
-            ]);
-
+            $this->logger->error('Order creation failed', ['error' => $e->getMessage()]);
             return ApiResponse::error($e->getMessage(), 400, 'order_creation_failed');
         }
     }

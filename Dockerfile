@@ -28,7 +28,7 @@ RUN cd /tmp \
 RUN apk add --no-cache \
     postgresql-dev \
     libpq \
-    && docker-php-ext-install pdo_pgsql
+    && docker-php-ext-install pdo_pgsql bcmath
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer

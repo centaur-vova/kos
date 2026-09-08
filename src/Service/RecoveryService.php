@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Config\Options;
-use App\Database;
-use App\Enum\OrderStatus;
+use App\Domain\Repository\OrderRepository;
 use Psr\Log\LoggerInterface;
 
 final readonly class RecoveryService
 {
     public function __construct(
-        private Database $db,
+        private OrderRepository $orderRepository,
         private DeliveryService $deliveryService,
         private Options $options,
         private LoggerInterface $logger,
@@ -23,31 +22,10 @@ final readonly class RecoveryService
     {
         $this->logger->info('Starting recovery of stuck orders');
 
-        $pdo = $this->db->getConnection();
-
-        $stmt = $pdo->prepare(
-            "SELECT id, order_code FROM orders
-             WHERE status IN (:paid, :delivering, :out_of_stock, :delivery_failed)
-             AND paid_at IS NOT NULL
-             AND updated_at < NOW() - INTERVAL '1 minute' * :stuck_after_min
-             ORDER BY created_at
-             LIMIT :batch_size"
+        $stuckOrders = $this->orderRepository->findStuckOrders(
+            stuckAfterMin: $this->options->recoveryStuckAfterMin,
+            limit: $this->options->recoveryBatchSize,
         );
-
-        $this->logger->info('SQL params', [
-            'stuck_after_min' => $this->options->recoveryStuckAfterMin,
-            'batch_size' => $this->options->recoveryBatchSize,
-        ]);
-
-        $stmt->execute([
-            'paid' => OrderStatus::Paid->value,
-            'delivering' => OrderStatus::Delivering->value,
-            'out_of_stock' => OrderStatus::OutOfStock->value,
-            'delivery_failed' => OrderStatus::DeliveryFailed->value,
-            'stuck_after_min' => $this->options->recoveryStuckAfterMin,
-            'batch_size' => $this->options->recoveryBatchSize,
-        ]);
-        $stuckOrders = $stmt->fetchAll();
 
         $this->logger->info('Found stuck orders', ['count' => count($stuckOrders)]);
 

@@ -23,15 +23,6 @@ Swoole\Runtime::enableCoroutine(SWOOLE_HOOK_ALL);
 // Загружаем конфиг
 $options = Bootstrap::init(__DIR__ . '/..');
 
-// Инициализируем DI
-Container::init($options);
-
-// Сразу получаем логгер
-$logger = Container::get(LoggerInterface::class);
-
-// Создаём приложение
-$app = new Application($options, $logger);
-
 $server = new Server(
     host: $options->serverHost,
     port: $options->serverPort,
@@ -41,21 +32,43 @@ $server->set([
     'worker_num' => $options->workerNum,
     'max_request' => 100000,
     'log_level' => SWOOLE_LOG_WARNING,
+    'enable_coroutine' => true, // Явно форсим корутины для HTTP-запросов
 ]);
 
-$server->on('start', function (Server $server) use ($logger, $options) {
-    $logger->info("Server started at http://{$server->host}:{$server->port}");
-
-    /** @var RecoveryService $recoveryService */
-    $recoveryService = Container::get(RecoveryService::class);
-
-    Swoole\Timer::tick(
-        $options->recoveryIntervalSec * 1000,
-        static fn () => $recoveryService->recoverStuckOrders()
-    );
+// Хук 'start' используем ТОЛЬКО для базового информирования в консоль
+$server->on('start', function (Server $server) {
+    echo "Master process started. Server running at http://{$server->host}:{$server->port}\n";
 });
 
-$server->on('request', function (Request $request, Response $response) use ($app) {
+// ГЛАВНЫЙ ХУК: Инициализация рантайма каждого отдельного Воркера
+$server->on('workerStart', function (Server $server, int $workerId) use ($options) {
+    // Включаем корутины и хуки для PDO/сетевого рантайма строго внутри воркера
+    Swoole\Runtime::enableCoroutine(SWOOLE_HOOK_ALL);
+
+    // Инициализируем DI-контейнер ИЗОЛИРОВАННО для этого процесса воркера!
+    Container::init($options);
+
+    // Получаем логгер для текущего воркера
+    $logger = Container::get(LoggerInterface::class);
+    $logger->info("Worker #{$workerId} initialized");
+
+    // Запускаем таймер на воркере #0
+    if ($workerId === 0) {
+        /** @var RecoveryService $recoveryService */
+        $recoveryService = Container::get(RecoveryService::class);
+
+        Swoole\Timer::tick(
+            $options->recoveryIntervalSec * 1000,
+            static fn () => $recoveryService->recoverStuckOrders()
+        );
+    }
+});
+
+// ХУК ОБРАБОТКИ ЗАПРОСОВ: Просто берем Application из DI-контейнера текущего воркера
+$server->on('request', function (Request $request, Response $response) {
+    /** @var Application $app */
+    $app = Container::get(Application::class);
+
     $app->handle($request, $response);
 });
 
