@@ -30,11 +30,4 @@ final readonly class PostgresProductRepository implements ProductRepository
             return $stmt->fetchAll();
         });
     }
-
-    public function resetStock(): void
-    {
-        $this->db->withConnection(function (PDO|PDOProxy $pdo) {
-            $pdo->exec("UPDATE products SET stock = 1000, reserved = 0");
-        });
-    }
 }

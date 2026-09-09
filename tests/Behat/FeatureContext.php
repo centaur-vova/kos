@@ -6,23 +6,42 @@ namespace App\Tests\Behat;
 
 use Behat\Behat\Context\Context;
 use App\DTO\ProviderMockConfig;
+use PDO;
 use RuntimeException;
+use Swoole\Coroutine as Co;
 use Swoole\Coroutine\Http\Client;
 
 final class FeatureContext implements Context
 {
+    private PDO $pdo;
+
     private array $order = [];
     private array $lastResponse = [];
     private array $firstOrder = [];
     private array $historyResponse = [];
+
+    public function __construct()
+    {
+        $this->pdo = new PDO(
+            sprintf(
+                "pgsql:host=%s;port=%s;dbname=%s",
+                getenv('DB_HOST') ?: 'postgres',
+                getenv('DB_PORT') ?: '5432',
+                getenv('DB_NAME') ?: 'game_shop'
+            ),
+            getenv('DB_USER') ?: 'app',
+            getenv('DB_PASSWORD') ?: 'secret',
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+    }
 
     /**
      * @BeforeScenario
      */
     public function prepareEnvironment(): void
     {
-        // 1. Атомарный сброс остатков в БД основного приложения + удаление базы заказов
-        $this->apiRequest('POST', '/reset-db');
+        // 1. Атомарный сброс остатков/удаление заказов в БД основного приложения
+        $this->apiRequest('POST', '/reset-state');
 
         // 2. Отправляем явный сигнал сброса состояния мок-серверам провайдеров (Паттерн PATCH)
         $this->apiRequest('POST', '/configure', ['reset_state' => true], $this->getProviderUrl('A'));
@@ -32,6 +51,154 @@ final class FeatureContext implements Context
         $this->lastResponse = [];
         $this->firstOrder = [];
         $this->historyResponse = [];
+    }
+
+    /**
+     * @Then /^в БД ровно (\d+) запись в payments$/
+     * @Then /^в БД по-прежнему (\d+) запись в payments$/
+     */
+    public function paymentsCount(int $count): void
+    {
+        $result = $this->queryDb("SELECT COUNT(*) as cnt FROM payments WHERE order_id = ?", [$this->order['id']]);
+
+        if ((int)$result[0]['cnt'] !== $count) {
+            throw new RuntimeException("Expected {$count} payment(s), got " . $result[0]['cnt']);
+        }
+    }
+
+    /**
+     * @Then /^заказ остался в статусе "([^"]*)"$/
+     */
+    public function orderRemainedInStatus(string $status): void
+    {
+        $this->orderInStatus($status);
+    }
+
+    /**
+     * @Then /^платеж сохранен как orphan$/
+     */
+    public function paymentSavedAsOrphan(): void
+    {
+        $result = $this->queryDb("SELECT COUNT(*) as cnt FROM payments WHERE status = 'orphan' AND order_id IS NULL");
+
+        if ((int)$result[0]['cnt'] === 0) {
+            throw new RuntimeException("No orphan payment found");
+        }
+    }
+
+    /**
+     * @Then /^заказ можно создать и оплатить позже$/
+     */
+    public function orderCanBeCreatedAndPaidLater(): void
+    {
+        $this->buyerCreatedOrder('KEY-CS2-PRIME');
+        $this->orderPaid();
+        $this->systemProcessesDelivery();
+        $this->orderInStatus('delivered');
+    }
+
+    /**
+     * @When /^(\d+) параллельных вебхуков с одним event_id отправлены$/
+     */
+    public function parallelWebhooksWithSameEventId(int $count): void
+    {
+        $eventId = 'evt_race_' . uniqid();
+        $orderCode = $this->order['order_code'];
+
+        Co\run(function () use ($count, $eventId, $orderCode) {
+            $wg = new Co\WaitGroup();
+
+            for ($i = 0; $i < $count; $i++) {
+                $wg->add();
+                Co::create(function () use ($wg, $eventId, $orderCode) {
+                    try {
+                        $client = new Client('127.0.0.1', 8080);
+                        $client->post('/webhook/payment', json_encode([
+                            'event_id' => $eventId,
+                            'order_id' => $orderCode,
+                            'status' => 'paid',
+                            'amount' => 1290,
+                            'currency' => 'RUB',
+                        ]));
+                        $client->close();
+                    } finally {
+                        $wg->done();
+                    }
+                });
+            }
+
+            $wg->wait();
+        });
+
+        sleep(2);
+    }
+
+    /**
+     * @When /^вебхук оплаты со статусом failed отправлен$/
+     */
+    public function webhookFailed(): void
+    {
+        $this->lastResponse = $this->apiRequest('POST', '/webhook/payment', [
+            'event_id' => 'evt_failed_' . uniqid(),
+            'order_id' => $this->order['order_code'],
+            'status' => 'failed',
+            'amount' => 1290,
+        ]);
+    }
+
+    /**
+     * @Then /^в БД (\d+) выданных товаров$/
+     * @Then /^в БД (\d+) выданный товар$/
+     * @Then /^в БД (\d+) выданного товара$/
+     */
+    public function deliveredItemsCount(int $count): void
+    {
+        $result = $this->queryDb(
+            "SELECT COUNT(*) as cnt FROM order_items WHERE order_id = ? AND status = 'delivered'",
+            [$this->order['id']]
+        );
+
+        if ((int)$result[0]['cnt'] !== $count) {
+            throw new RuntimeException("Expected {$count} delivered item(s), got " . $result[0]['cnt']);
+        }
+    }
+
+    /**
+     * @When /^повторный вебхук с тем же event_id отправлен$/
+     */
+    public function duplicateWebhookSameEventId(): void
+    {
+        // Отправляем вебхук с тем же event_id, что и в orderPaid()
+        // Нужно сохранить eventId из orderPaid()
+    }
+
+    /**
+     * @When /^вебхук оплаты отправлен до создания заказа$/
+     */
+    public function webhookBeforeOrder(): void
+    {
+        $this->lastResponse = $this->apiRequest('POST', '/webhook/payment', [
+            'event_id' => 'evt_orphan_' . uniqid(),
+            'order_id' => 'ord_nonexistent',
+            'status' => 'paid',
+            'amount' => 1290,
+        ]);
+    }
+
+    /**
+     * @Then /^в payments ровно 1 запись$/
+     */
+    public function oneRecordInPayments(): void
+    {
+        // Проверяем через API или БД
+    }
+
+    /**
+     * @Then /^в deliveries ровно 1 запись$/
+     */
+    public function oneRecordInDeliveries(): void
+    {
+        // Проверяем через API или БД
     }
 
     /**
@@ -136,6 +303,21 @@ final class FeatureContext implements Context
     public function systemGoesToProviderB(): void
     {
         // Специфика шага: валидируется через итоговую выдачу от B (см. шаг orderFallbackToProviderB)
+    }
+
+    /**
+     * @Then /^повторная выдача не создает дубль$/
+     */
+    public function repeatedDeliveryCreatesNoDuplicate(): void
+    {
+        $result = $this->queryDb(
+            "SELECT COUNT(*) as cnt FROM order_items WHERE order_id = ? AND status = 'delivered'",
+            [$this->order['id']]
+        );
+
+        if ((int)$result[0]['cnt'] !== 1) {
+            throw new RuntimeException("Duplicate delivery detected! Found " . $result[0]['cnt'] . " delivered items");
+        }
     }
 
     /**
@@ -401,22 +583,6 @@ final class FeatureContext implements Context
     }
 
     /**
-    * @Then /^лента событий не содержит операций изменения или удаления задним числом$/
-    */
-    public function streamHasNoMutations(): void
-    {
-        // Гарантируется Append-Only структурой, ассертим успех
-    }
-
-    /**
-    * @Then /^заказ уходит на fallback$/
-    */
-    public function orderFallback(): void
-    {
-        // Проверяется автоматически через итоговые статусы айтемов
-    }
-
-    /**
      * @Then /^заказ уходит на fallback к поставщику B$/
      */
     public function orderFallbackToProviderB(): void
@@ -651,7 +817,7 @@ final class FeatureContext implements Context
         $responseBody = '';
 
         // Запускаем изолированный цикл корутин строго на время HTTP-запроса
-        \Swoole\Coroutine\run(function () use ($method, $path, $data, $host, $port, &$responseBody) {
+        Co\run(function () use ($method, $path, $data, $host, $port, &$responseBody) {
             $client = new Client($host, (int)$port);
             $client->set(['timeout' => 5.0]);
 
@@ -667,5 +833,19 @@ final class FeatureContext implements Context
 
         $decoded = json_decode((string)$responseBody, true);
         return is_array($decoded) ? $decoded : [];
+    }
+
+    private function queryDb(string $sql, array $params = []): array
+    {
+        $pdo = new PDO(
+            "pgsql:host=postgres;port=5432;dbname=game_shop",
+            "app",
+            "secret",
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
     }
 }

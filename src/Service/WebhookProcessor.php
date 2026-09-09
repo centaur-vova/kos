@@ -41,9 +41,7 @@ final readonly class WebhookProcessor
             $result = $this->paymentService->process($webhook);
 
             if ($result->isProcessed() && $webhook->isPaid()) {
-                Coroutine::create(function () use ($webhook) {
-                    $this->paymentService->deliverByOrderCode($webhook->orderCode);
-                });
+                $this->paymentService->deliverByOrderCode($webhook->orderCode);
             }
 
             return $result;

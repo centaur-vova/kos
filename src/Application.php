@@ -31,7 +31,8 @@ class Application
         $this->router->get('/orders/{id}/state', [Controller\OrderController::class, 'stateAt']);
 
         $this->router->get('/catalog', [Controller\CatalogController::class, 'index']);
-        $this->router->post('/reset-db', [Controller\CatalogController::class, 'resetDB']);
+
+        $this->router->post('/reset-state', [Controller\TestController::class, 'resetState']);
 
         $this->router->post('/webhook/payment', [Controller\WebhookController::class, 'handle']);
 

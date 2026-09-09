@@ -45,6 +45,7 @@ final readonly class PaymentService
 
         // Проверяем статус заказа
         $currentStatus = OrderStatus::tryFrom($order['status']);
+        $this->logger->error("CURRENTS: {$order['status']}");
 
         if ($currentStatus === OrderStatus::Delivered) {
             $this->paymentRepository->saveDuplicate($webhook, $order['id']);
