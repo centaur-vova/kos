@@ -21,7 +21,7 @@ jobs:
         run: docker compose up -d
 
       - name: Wait for services
-        run: sleep 10
+        run: sleep 30
 
       - name: Run tests
         run: make test
