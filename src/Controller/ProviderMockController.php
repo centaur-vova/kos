@@ -151,8 +151,17 @@ final class ProviderMockController
 
         // 3. Симуляция недобросовестного поведения поставщика (3 сценария расхождения балансов)
         if ($behavior < (($config->errorRate ?? 0) + ($config->timeoutRate ?? 0) + ($config->dishonestRate ?? 0))) {
-            $dishonestType = $hash % 3;
+            // Если dishonestRate = 100 — всегда HTTP 500 (скрытая утечка)
+            if (($config->dishonestRate ?? 0) === 100) {
+                $code = $this->generateCode($sku);
+                $storage->set("provider:issued:{$requestId}", $code);
 
+                $logger->error('Dishonest: 500 error but code internally issued', ['request_id' => $requestId]);
+                $this->jsonResponse($res, 500, ['status' => 'error', 'reason' => 'internal_server_error']);
+                return;
+            }
+
+            $dishonestType = $hash % 3;
             if ($dishonestType === 0) {
                 // Кейс 0: Выдача дубликата кода из глобальной Shared Memory
                 $duplicateCode = $storage->get('provider:last_global_code') ?: 'DUP-CODE-1111-2222';
@@ -164,14 +173,6 @@ final class ProviderMockController
                 $wrongCode = $this->generateCode('WRONG-SKU-FORMAT');
                 $logger->warning('Dishonest: wrong format code issued', ['request_id' => $requestId, 'code' => $wrongCode]);
                 $this->jsonResponse($res, 200, ['status' => 'ok', 'request_id' => $requestId, 'code' => $wrongCode]);
-                return;
-            } else {
-                // Кейс 2: Скрытая утечка. Код зафиксирован в СУБД провайдера, но бэкенду возвращаем HTTP 500
-                $code = $this->generateCode($sku);
-                $storage->set("provider:issued:{$requestId}", $code);
-
-                $logger->error('Dishonest: 500 error but code internally issued', ['request_id' => $requestId]);
-                $this->jsonResponse($res, 500, ['status' => 'error', 'reason' => 'internal_server_error']);
                 return;
             }
         }

@@ -702,6 +702,65 @@ final class FeatureContext implements Context
     }
 
     /**
+     * @When /^заказ искусственно переводится в зависшее состояние$/
+     */
+    public function orderMarkedAsStuck(): void
+    {
+        $this->queryDb(
+            "UPDATE orders SET status = 'paid', updated_at = NOW() - INTERVAL '10 minutes' WHERE id = ?",
+            [$this->order['id']]
+        );
+
+        // Сбрасываем и товары, чтобы сага могла их подхватить
+        $this->queryDb(
+            "UPDATE order_items SET status = 'pending', delivered_code = NULL, provider = NULL, provider_request_id = NULL WHERE order_id = ?",
+            [$this->order['id']]
+        );
+    }
+
+    /**
+     * @Then /^сверка находит заказ в списке "оплачен, но не выдан"$/
+     */
+    public function reconciliationFindsOrder(): void
+    {
+        $response = $this->apiRequest('GET', '/reconciliation');
+        $details = $response['data']['details'] ?? [];
+
+        $found = false;
+        foreach ($details['paid_not_delivered'] ?? [] as $order) {
+            if ($order['order_code'] === $this->order['order_code']) {
+                $found = true;
+                break;
+            }
+        }
+
+        if (!$found) {
+            throw new RuntimeException("Order not found in reconciliation");
+        }
+    }
+
+    /**
+     * @When /^запускается фоновая задача восстановления$/
+     */
+    public function recoveryRuns(): void
+    {
+        // Запускаем RecoveryService напрямую через API или ждем таймер
+        $this->apiRequest('POST', '/recovery');
+    }
+
+    /**
+     * @Then /^заказ доходит до конечного состояния$/
+     */
+    public function orderReachesFinalState(): void
+    {
+        $order = $this->getOrder();
+
+        if (!in_array($order['status'], ['delivered', 'partially_delivered', 'delivery_failed'])) {
+            throw new RuntimeException("Order stuck in status: {$order['status']}");
+        }
+    }
+
+    /**
      * @Then /^создан возврат на полную сумму$/
      */
     public function refundCreatedForFullAmount(): void
@@ -814,6 +873,36 @@ final class FeatureContext implements Context
                 "Refunded mismatch: expected {$expectedRefunded}, got {$report['total_refunded_cents']}"
             );
         }
+    }
+
+    /**
+     * @Given /^поставщик B не может выдать "([^"]*)"$/
+     */
+    public function providerBCannotDeliver(string $sku): void
+    {
+        $config = ProviderMockConfig::create()->withBlockedSkus([$sku]);
+        $this->configureProvider('B', $config);
+    }
+
+    /**
+     * @When /^остаток пополнен$/
+     */
+    public function stockReplenished(): void
+    {
+        $this->configureProvider('A', ProviderMockConfig::createDefault());
+        $this->configureProvider('B', ProviderMockConfig::createDefault());
+
+        // Сбрасываем товар в pending
+        $this->queryDb(
+            "UPDATE order_items SET status = 'pending', delivered_code = NULL, provider = NULL, provider_request_id = NULL WHERE order_id = ?",
+            [$this->order['id']]
+        );
+
+        // Обновляем заказ — делаем его "зависшим"
+        $this->queryDb(
+            "UPDATE orders SET status = 'delivery_failed', updated_at = NOW() - INTERVAL '10 minutes' WHERE id = ?",
+            [$this->order['id']]
+        );
     }
 
     /**

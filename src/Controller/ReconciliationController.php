@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Config\Options;
 use App\Domain\Repository\ReconciliationRepository;
 use App\Http\ApiResponse;
+use App\Service\RecoveryService;
 use Psr\Log\LoggerInterface;
 use Swoole\Http\Request;
 
@@ -14,6 +15,7 @@ final readonly class ReconciliationController
 {
     public function __construct(
         private ReconciliationRepository $reconciliationRepository,
+        private RecoveryService $recoveryService,
         private Options $options,
         private LoggerInterface $logger,
     ) {
@@ -39,5 +41,12 @@ final readonly class ReconciliationController
                 'stuck_delivering' => $result['stuckDelivering'],
             ],
         ]);
+    }
+
+    public function recover(Request $request, array $params): ApiResponse
+    {
+        $this->recoveryService->recoverStuckOrders();
+
+        return ApiResponse::success(['status' => 'recovered']);
     }
 }

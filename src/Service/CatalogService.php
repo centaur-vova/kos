@@ -13,13 +13,8 @@ final readonly class CatalogService
     ) {
     }
 
-    public function getAvailableProducts(): array
+    public function getAvailableProducts(int $limit = 100, int $offset = 0): array
     {
-        return $this->productRepository->findAvailable();
-    }
-
-    public function resetStock(): void
-    {
-        $this->productRepository->resetStock();
+        return $this->productRepository->findAvailable($limit, $offset);
     }
 }

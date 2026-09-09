@@ -19,16 +19,14 @@ final readonly class CatalogController
 
     public function index(Request $request, array $params): ApiResponse
     {
-        $products = $this->catalogService->getAvailableProducts();
+        $limit = (int)($request->get['limit'] ?? 100);
+        $offset = (int)($request->get['offset'] ?? 0);
+
+        // Ограничиваем
+        $limit = min(max($limit, 1), 500); // max 500 за запрос
+
+        $products = $this->catalogService->getAvailableProducts($limit, $offset);
 
         return ApiResponse::success(['products' => $products]);
-    }
-
-    public function resetDB(Request $request, array $params): ApiResponse
-    {
-        $this->catalogService->resetStock();
-        $this->orderService->truncateOrders();
-
-        return ApiResponse::success();
     }
 }
