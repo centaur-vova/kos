@@ -28,7 +28,8 @@ final readonly class ItemDeliveryProcessor
         $attemptCount = 0;
 
         while ($currentProvider !== null) {
-            $requestId = "req_{$item['id']}-" . ($attemptCount + 1);
+            // ВАЖНО: requestId уникален для КАЖДОГО провайдера, чтобы идемпотентность A не сработала при fallback на B
+            $requestId = "req_{$item['id']}-{$currentProvider->name}-" . ($attemptCount + 1);
 
             // Задаем промежуточный статус "В процессе доставки"
             $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::Delivering);
@@ -59,6 +60,14 @@ final readonly class ItemDeliveryProcessor
 
                 if (($result['reason'] ?? '') === 'out_of_stock') {
                     $this->logger->warning('Provider out of stock, switching to fallback immediately', [
+                        'sku' => $item['sku'],
+                        'provider' => $currentProvider->name,
+                    ]);
+                }
+
+                // НОВОЕ: Обработка HTTP 500 как fallback-триггера
+                if (($result['reason'] ?? '') === 'internal_server_error') {
+                    $this->logger->warning('Provider returned 500, switching to fallback', [
                         'sku' => $item['sku'],
                         'provider' => $currentProvider->name,
                     ]);
@@ -102,6 +111,7 @@ final readonly class ItemDeliveryProcessor
             ]);
 
             try {
+                // ВАЖНО: В ретраях используем ТОТ ЖЕ requestId, чтобы идемпотентность работала
                 $result = $this->providerClient->issue(
                     requestId: $requestId,
                     sku: $item['sku'],
@@ -116,8 +126,8 @@ final readonly class ItemDeliveryProcessor
                     return false; // Код грязный, ретраить этого провайдера бессмысленно
                 }
 
-                // Если получили явный текстовый отказ (например out_of_stock) — прекращаем ретраи сети
-                if (($result['reason'] ?? '') === 'out_of_stock') {
+                // Если получили явный текстовый отказ (например out_of_stock или 500) — прекращаем ретраи сети
+                if (in_array(($result['reason'] ?? ''), ['out_of_stock', 'internal_server_error'], true)) {
                     return false;
                 }
 

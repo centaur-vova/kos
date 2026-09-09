@@ -53,6 +53,9 @@ final class FeatureContext implements Context
         $this->lastResponse = [];
         $this->firstOrder = [];
         $this->historyResponse = [];
+
+        // Дополнительно: ждём, чтобы сброс точно применился
+        usleep(100_000); // 100ms
     }
 
     /**
