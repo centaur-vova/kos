@@ -175,4 +175,32 @@ final readonly class EventSourcingService
         return $state;
     }
 
+    public function getFinancialReport(string $fromDate, string $toDate): array
+    {
+        $events = $this->eventRepository->findByDateRange($fromDate, $toDate);
+
+        $report = [
+            'total_received_cents' => 0,
+            'total_refunded_cents' => 0,
+            'balance_cents' => 0,
+            'events_count' => count($events),
+        ];
+
+        foreach ($events as $event) {
+            $data = json_decode($event['event_data'], true) ?? [];
+
+            if ($event['event_type'] === OrderEventType::OrderPaid->value) {
+                $report['total_received_cents'] += (int)($data['amount_cents'] ?? 0);
+            }
+
+            if ($event['event_type'] === OrderEventType::ItemRefunded->value) {
+                $report['total_refunded_cents'] += (int)($data['refund_amount_cents'] ?? 0);
+            }
+        }
+
+        $report['balance_cents'] = $report['total_received_cents'] - $report['total_refunded_cents'];
+
+        return $report;
+    }
+
 }

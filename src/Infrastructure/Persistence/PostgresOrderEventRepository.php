@@ -65,4 +65,17 @@ final readonly class PostgresOrderEventRepository implements OrderEventRepositor
         });
     }
 
+    public function findByDateRange(string $fromDate, string $toDate): array
+    {
+        return $this->db->withConnection(function (PDO|PDOProxy $pdo) use ($fromDate, $toDate) {
+            $stmt = $pdo->prepare(
+                "SELECT * FROM order_events
+             WHERE created_at BETWEEN ?::TIMESTAMPTZ AND ?::TIMESTAMPTZ
+             ORDER BY created_at ASC"
+            );
+            $stmt->execute([$fromDate, $toDate]);
+            return $stmt->fetchAll();
+        });
+    }
+
 }

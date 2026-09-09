@@ -7,7 +7,6 @@ namespace App\DTO;
 final readonly class OrderResponse implements \JsonSerializable
 {
     /**
-     * @param DeliveryResponse[] $deliveries
      * @param OrderItemResponse[] $items
      * @param array $refunds
      */
@@ -25,7 +24,6 @@ final readonly class OrderResponse implements \JsonSerializable
         public ?\DateTimeImmutable $paidAt = null,
         public ?\DateTimeImmutable $deliveredAt = null,
         public int $version = 0,
-        public array $deliveries = [],
         public array $items = [],
         public array $refunds = [],
     ) {
@@ -33,11 +31,6 @@ final readonly class OrderResponse implements \JsonSerializable
 
     public static function fromArray(array $order): self
     {
-        $deliveries = array_map(
-            static fn (array $delivery) => DeliveryResponse::fromArray($delivery),
-            $order['deliveries'] ?? [],
-        );
-
         $items = array_map(
             static fn (array $item) => OrderItemResponse::fromArray($item),
             $order['items'] ?? [],
@@ -57,7 +50,6 @@ final readonly class OrderResponse implements \JsonSerializable
             paidAt: isset($order['paid_at']) ? new \DateTimeImmutable($order['paid_at']) : null,
             deliveredAt: isset($order['delivered_at']) ? new \DateTimeImmutable($order['delivered_at']) : null,
             version: (int)$order['version'],
-            deliveries: $deliveries,
             items: $items,
             refunds: $order['refunds'] ?? [],
         );
@@ -79,7 +71,6 @@ final readonly class OrderResponse implements \JsonSerializable
             'paid_at' => $this->paidAt?->format('c'),
             'delivered_at' => $this->deliveredAt?->format('c'),
             'version' => $this->version,
-            'deliveries' => $this->deliveries,
             'items' => $this->items,
             'refunds' => $this->refunds,
         ];

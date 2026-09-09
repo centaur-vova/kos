@@ -17,4 +17,7 @@ interface OrderEventRepository
     public function findByOrderIdUntil(string $orderId, string $untilDate): array;
 
     public function findByOrderIdUntilId(string $orderId, int $untilEventId): array;
+
+    /** @return array<int, array<string, mixed>> */
+    public function findByDateRange(string $fromDate, string $toDate): array;
 }

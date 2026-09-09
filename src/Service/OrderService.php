@@ -67,9 +67,6 @@ final readonly class OrderService
         // Подгружаем позиции
         $order['items'] = $this->orderItemRepository->findByOrderId($order['id']);
 
-        // Подгружаем доставки
-        $order['deliveries'] = $this->orderItemRepository->findDeliveriesByOrderId($order['id']);
-
         // Подгружаем возвраты
         $order['refunds'] = $this->orderItemRepository->findRefundsByOrderId($order['id']);
 

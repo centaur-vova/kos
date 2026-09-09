@@ -29,10 +29,9 @@ class Application
         $this->router->post('/orders', [Controller\OrderController::class, 'create']);
         $this->router->get('/orders/{id}', [Controller\OrderController::class, 'show']);
         $this->router->get('/orders/{id}/state', [Controller\OrderController::class, 'stateAt']);
+        $this->router->get('/orders/financial-report', [Controller\OrderController::class, 'financialReport']);
 
         $this->router->get('/catalog', [Controller\CatalogController::class, 'index']);
-
-        $this->router->post('/reset-state', [Controller\TestController::class, 'resetState']);
 
         $this->router->post('/webhook/payment', [Controller\WebhookController::class, 'handle']);
 

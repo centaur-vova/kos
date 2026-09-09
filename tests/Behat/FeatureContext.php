@@ -41,7 +41,9 @@ final class FeatureContext implements Context
     public function prepareEnvironment(): void
     {
         // 1. Атомарный сброс остатков/удаление заказов в БД основного приложения
-        $this->apiRequest('POST', '/reset-state');
+        $this->queryDb("TRUNCATE TABLE orders, order_items, payments, order_events RESTART IDENTITY CASCADE");
+        $this->queryDb("UPDATE products SET reserved = 0");
+        $this->queryDb("UPDATE products SET stock = 1000 WHERE type != 'key'");
 
         // 2. Отправляем явный сигнал сброса состояния мок-серверам провайдеров (Паттерн PATCH)
         $this->apiRequest('POST', '/configure', ['reset_state' => true], $this->getProviderUrl('A'));
@@ -189,14 +191,6 @@ final class FeatureContext implements Context
      * @Then /^в payments ровно 1 запись$/
      */
     public function oneRecordInPayments(): void
-    {
-        // Проверяем через API или БД
-    }
-
-    /**
-     * @Then /^в deliveries ровно 1 запись$/
-     */
-    public function oneRecordInDeliveries(): void
     {
         // Проверяем через API или БД
     }
@@ -760,6 +754,81 @@ final class FeatureContext implements Context
         );
         if (abs($deliveredSum + $refundSum - (float)$order['price']) > 0.01) {
             throw new RuntimeException("Accounting Error: Delivered ({$deliveredSum}) + refund ({$refundSum}) != paid ({$order['price']})");
+        }
+    }
+
+    /**
+ * @When /^запрашивается финансовый отчет за период$/
+ */
+    public function requestFinancialReport(): void
+    {
+        $fromDate = date('c', time() - 3600); // час назад
+        $toDate = date('c', time() + 60);     // с запасом
+
+        $this->historyResponse = $this->apiRequest(
+            'GET',
+            "/orders/financial-report?from=" . urlencode($fromDate) . "&to=" . urlencode($toDate)
+        );
+    }
+
+    /**
+     * @Then /^отчет содержит корректные суммы платежей и возвратов$/
+     */
+    public function reportContainsCorrectSums(): void
+    {
+        $report = $this->historyResponse['data']['report'] ?? [];
+
+        if (!isset($report['total_received_cents']) || !isset($report['total_refunded_cents'])) {
+            throw new RuntimeException("Financial report missing required fields");
+        }
+
+        // Проверяем, что суммы не отрицательные
+        if ($report['total_received_cents'] < 0 || $report['total_refunded_cents'] < 0) {
+            throw new RuntimeException("Financial report contains negative values");
+        }
+
+        // Проверяем, что events_count > 0 (были события)
+        if ((int)($report['events_count'] ?? 0) === 0) {
+            throw new RuntimeException("Financial report has no events");
+        }
+
+        // Сверяем с событиями в БД
+        $dbEvents = $this->queryDb(
+            "SELECT
+            SUM(CASE WHEN event_type = 'order.paid' THEN CAST(event_data->>'amount_cents' AS BIGINT) ELSE 0 END) as received,
+            SUM(CASE WHEN event_type = 'item.refunded' THEN CAST(event_data->>'refund_amount_cents' AS BIGINT) ELSE 0 END) as refunded
+         FROM order_events"
+        );
+
+        $expectedReceived = (int)($dbEvents[0]['received'] ?? 0);
+        $expectedRefunded = (int)($dbEvents[0]['refunded'] ?? 0);
+
+        if ((int)$report['total_received_cents'] !== $expectedReceived) {
+            throw new RuntimeException(
+                "Received mismatch: expected {$expectedReceived}, got {$report['total_received_cents']}"
+            );
+        }
+
+        if ((int)$report['total_refunded_cents'] !== $expectedRefunded) {
+            throw new RuntimeException(
+                "Refunded mismatch: expected {$expectedRefunded}, got {$report['total_refunded_cents']}"
+            );
+        }
+    }
+
+    /**
+     * @Then /^баланс равен разнице между полученными и возвращенными средствами$/
+     */
+    public function balanceEqualsDifference(): void
+    {
+        $report = $this->historyResponse['data']['report'] ?? [];
+
+        $expectedBalance = $report['total_received_cents'] - $report['total_refunded_cents'];
+
+        if ((int)$report['balance_cents'] !== $expectedBalance) {
+            throw new RuntimeException(
+                "Balance mismatch: expected {$expectedBalance}, got {$report['balance_cents']}"
+            );
         }
     }
 

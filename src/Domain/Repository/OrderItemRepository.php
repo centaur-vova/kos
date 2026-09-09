@@ -18,9 +18,6 @@ interface OrderItemRepository
     public function findByOrderId(string $orderId): array;
 
     /** @return array<int, array<string, mixed>> */
-    public function findDeliveriesByOrderId(string $orderId): array;
-
-    /** @return array<int, array<string, mixed>> */
     public function findRefundsByOrderId(string $orderId): array;
 
     public function findByDeliveredCode(string $code): ?array;

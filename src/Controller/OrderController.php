@@ -90,6 +90,19 @@ final readonly class OrderController
         return ApiResponse::success(['state' => $state]);
     }
 
+    public function financialReport(Request $request, array $params): ApiResponse
+    {
+        $fromDate = $request->get['from'] ?? null;
+        $toDate = $request->get['to'] ?? null;
+
+        if (!$fromDate || !$toDate) {
+            return ApiResponse::error('from and to dates required', 400);
+        }
+
+        $report = $this->eventSourcingService->getFinancialReport($fromDate, $toDate);
+
+        return ApiResponse::success(['report' => $report]);
+    }
 
     public function events(Request $request, array $params): ApiResponse
     {

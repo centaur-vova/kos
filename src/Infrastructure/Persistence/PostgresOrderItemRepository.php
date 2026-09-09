@@ -46,15 +46,6 @@ final readonly class PostgresOrderItemRepository implements OrderItemRepository
         });
     }
 
-    public function findDeliveriesByOrderId(string $orderId): array
-    {
-        return $this->db->withConnection(function (PDO|PDOProxy $pdo) use ($orderId) {
-            $stmt = $pdo->prepare("SELECT * FROM deliveries WHERE order_id = ? ORDER BY created_at");
-            $stmt->execute([$orderId]);
-            return $stmt->fetchAll();
-        });
-    }
-
     public function findRefundsByOrderId(string $orderId): array
     {
         return $this->db->withConnection(function (PDO|PDOProxy $pdo) use ($orderId) {
