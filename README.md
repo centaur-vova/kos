@@ -43,9 +43,6 @@ make test
 
 ```bash
 make test-unit       # unit тесты
-make test-race       # 50 параллельных вебхуков
-make test-timeout    # таймаут провайдера
-make test-fallback   # fallback A -> B
 make test-recovery   # фоновое восстановление
 make test-reconciliation # сверка
 make test-catalog    # каталог
@@ -96,15 +93,33 @@ make reset-stock
 ## Структура
 
 ```
-src/
-├── Controller/ # HTTP контроллеры
-├── Service/    # Бизнес-логика (PaymentService, WebhookProcessor, DeliveryService)
-├── Storage/    # Хранилище (Swoole Table)
-├── Config/     # Конфигурация
-├── DTO/        # Data Transfer Objects (PaymentWebhook, OrderResponse, etc.)
-├── Enum/       # Перечисления со статусами
-├── Exception/  # Доменные исключения
-└── Support/    # Логгер (StdoutLogger)
+## Структура проекта
+├── features/ # Behat-сценарии (event sourcing, fraud protection, multi-item)
+├── migrations/ # SQL-миграции (001_tables ... 005_event_sourcing_immutability)
+├── mock/ # Заглушка поставщика (mock provider)
+├── public/ # Точка входа index.php
+├── scripts/ # Тестовые скрипты (catalog, reconciliation, recovery)
+├── src/
+│ ├── Application.php # Инициализация роутов и обработка запросов
+│ ├── Bootstrap.php # Загрузка конфигурации и контейнера
+│ ├── Container.php # DI-контейнер (PHP-DI)
+│ ├── Database.php # Пул соединений Swoole + транзакции
+│ ├── Router.php # Маршрутизатор
+│ ├── Config/ # Конфигурация (Options, ProviderConfig, ConfigLoader)
+│ ├── Controller/ # HTTP контроллеры (Order, Payment, Catalog, Reconciliation, Webhook)
+│ ├── Domain/
+│ │ ├── Entity/ # Доменные сущности
+│ │ └── Repository/ # Интерфейсы репозиториев
+│ ├── DTO/ # Data Transfer Objects (PaymentWebhook, OrderResponse, OrderItem...)
+│ ├── Enum/ # Перечисления (OrderStatus, OrderEventType, OrderItemStatus...)
+│ ├── Exception/ # Доменные исключения + исключения провайдеров
+│ ├── Http/ # ApiResponse (формат ответов)
+│ ├── Infrastructure/
+│ │ └── Persistence/ # Реализации репозиториев на PostgreSQL
+│ ├── Service/ # Бизнес-логика (PaymentService, DeliveryService, EventSourcing...)
+│ ├── Storage/ # Хранилище in-memory (Swoole Table)
+│ └── Support/ # Логгер (StdoutLogger)
+└── tests/ # Unit-тесты + Behat-контекст
 ```
 
 ## Известные ограничения MVP

@@ -7,7 +7,6 @@ namespace App\Tests\Behat;
 use Behat\Behat\Context\Context;
 use App\DTO\ProviderMockConfig;
 use RuntimeException;
-use Swoole\Coroutine;
 use Swoole\Coroutine\Http\Client;
 
 final class FeatureContext implements Context
@@ -213,7 +212,7 @@ final class FeatureContext implements Context
      */
     public function systemLogs(string $message): void
     {
-        // Метод-заглушка для прохождения шага текста
+        // TODO: еще предстоит сделать
     }
 
     /**

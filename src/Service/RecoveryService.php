@@ -20,8 +20,6 @@ final readonly class RecoveryService
 
     public function recoverStuckOrders(): void
     {
-        return; // TOREMOVE
-
         $this->logger->info('Starting recovery of stuck orders');
 
         $stuckOrders = $this->orderRepository->findStuckOrders(
