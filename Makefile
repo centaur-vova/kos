@@ -42,26 +42,26 @@ ps:
 test: reset-stock test-unit behat test-catalog
 
 test-unit:
-	docker compose exec -T app vendor/bin/phpunit
+	docker compose exec app vendor/bin/phpunit
 
 behat:
-	docker compose exec -T app vendor/bin/behat
+	docker compose exec app vendor/bin/behat
 
 test-catalog:
 	./scripts/test-catalog.sh
 
 # Очистка системы
 reset-stock:
-	docker compose run --rm postgres psql -h postgres -U app -d game_shop -c "UPDATE products SET stock = 1000, reserved = 0;"
+	docker compose exec postgres psql -U app -d game_shop -c "UPDATE products SET stock = 1000, reserved = 0;"
 
 # Установить сток в нули
 empty-stock:
-	docker compose run --rm postgres psql -h postgres -U app -d game_shop -c "UPDATE products SET stock = 0, reserved = 0;"
+	docker compose exec postgres psql -U app -d game_shop -c "UPDATE products SET stock = 0, reserved = 0;"
 
 clean-orders:
-	docker compose run --rm postgres psql -h postgres -U app -d game_shop -c "TRUNCATE payments, refunds, order_items, order_events, orders RESTART IDENTITY CASCADE; UPDATE products SET reserved = 0;"
+	docker compose exec postgres psql -U app -d game_shop -c "TRUNCATE payments, refunds, order_items, order_events, orders RESTART IDENTITY CASCADE; UPDATE products SET reserved = 0;"
 
 clean: reset-stock clean-orders
 
 behat-focus:
-	docker compose exec -T app vendor/bin/behat --tags focus
+	docker compose exec app vendor/bin/behat --tags focus
