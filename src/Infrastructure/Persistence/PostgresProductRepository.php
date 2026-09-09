@@ -18,15 +18,16 @@ final readonly class PostgresProductRepository implements ProductRepository
 
     public function findAvailable(int $limit = 100, int $offset = 0): array
     {
-        return $this->db->withConnection(function (PDO|PDOProxy $pdo) {
-            $stmt = $pdo->query(
+        return $this->db->withConnection(function (PDO|PDOProxy $pdo) use ($limit, $offset) {
+            $stmt = $pdo->prepare(
                 "SELECT sku, name, type, price_cents, currency,
-                        stock, reserved, (stock - reserved) as available
-                 FROM products
-                 WHERE stock > reserved
-                 ORDER BY type, price_cents"
+                    stock, reserved, (stock - reserved) as available
+                FROM products
+                WHERE stock > reserved
+                ORDER BY type, price_cents
+                LIMIT ? OFFSET ?"
             );
-
+            $stmt->execute([$limit, $offset]);
             return $stmt->fetchAll();
         });
     }

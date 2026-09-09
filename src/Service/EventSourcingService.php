@@ -99,19 +99,19 @@ final readonly class EventSourcingService
             $data = json_decode($event['event_data'], true) ?? [];
 
             switch ($type) {
-                case 'order.created':
+                case OrderEventType::OrderCreated->value:
                     $state['status'] = 'created';
                     $state['items'] = $data['items'] ?? [];
                     break;
-                case 'order.paid':
+                case OrderEventType::OrderPaid->value:
                     $state['status'] = 'paid';
                     $state['paid_at'] = $data['paid_at'] ?? null;
                     break;
-                case 'item.delivered':
+                case OrderEventType::ItemDelivered->value:
                     $state['items'] = $this->updateItemStatus($state['items'], (string)$data['item_id'], 'delivered', $data);
                     $state['delivered_items_count']++;
                     break;
-                case 'item.refunded':
+                case OrderEventType::ItemRefunded->value:
                     $state['items'] = $this->updateItemStatus($state['items'], (string)$data['item_id'], 'refunded', $data);
                     $state['refunds'][] = $data;
                     $state['refunded_amount_cents'] += ($data['refund_amount_cents'] ?? 0);
@@ -121,6 +121,7 @@ final readonly class EventSourcingService
 
         return $state;
     }
+
 
     private function updateItemStatus(array $items, string $itemId, string $status, array $data): array
     {
@@ -159,12 +160,12 @@ final readonly class EventSourcingService
             $type = $event['event_type'];
             $data = json_decode($event['event_data'], true) ?? [];
 
-            if ($type === 'order.created') {
+            if ($type === OrderEventType::OrderCreated->value) {
                 $state['status'] = 'created';
                 $state['items'] = $data['items'] ?? [];
             }
 
-            if ($type === 'order.paid') {
+            if ($type === OrderEventType::OrderPaid->value) {
                 $state['status'] = 'paid';
                 $state['paid_at'] = $data['paid_at'] ?? null;
                 // ФИНАЛЬНАЯ ТOЧКА: Оплата прошла, дальше историю для этого среза не крутим!

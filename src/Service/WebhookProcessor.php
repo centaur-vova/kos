@@ -9,7 +9,6 @@ use App\DTO\PaymentWebhook;
 use App\DTO\PaymentProcessingResult;
 use App\Storage\StorageInterface;
 use Psr\Log\LoggerInterface;
-use Swoole\Coroutine;
 
 final readonly class WebhookProcessor
 {
