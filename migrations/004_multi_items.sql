@@ -77,3 +77,9 @@ CREATE INDEX IF NOT EXISTS idx_order_events_order_id ON order_events(order_id);
 CREATE INDEX IF NOT EXISTS idx_order_events_created ON order_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_supplier_queue_status ON supplier_queue(status) WHERE status = 'queued';
 CREATE INDEX IF NOT EXISTS idx_supplier_queue_priority ON supplier_queue(priority DESC, created_at ASC);
+
+-- Покрывающий индекс для витрины
+CREATE INDEX IF NOT EXISTS idx_products_catalog_covering
+ON products (type, price_cents)
+INCLUDE (sku, name, currency, stock, reserved)
+WHERE stock > reserved;

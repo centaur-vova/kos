@@ -21,9 +21,3 @@ CREATE INDEX IF NOT EXISTS idx_keys_pool_order_id ON keys_pool(order_id);
 -- Пул ключей
 CREATE INDEX IF NOT EXISTS idx_keys_pool_available ON keys_pool(status)
     WHERE status = 'available';
-
--- Покрывающий индекс для витрины
-CREATE INDEX IF NOT EXISTS idx_products_catalog_covering
-ON products (type, price_cents)
-INCLUDE (sku, name, currency, stock, reserved)
-WHERE stock > reserved;
