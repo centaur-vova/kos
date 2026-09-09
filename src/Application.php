@@ -28,12 +28,12 @@ class Application
 
         $this->router->post('/orders', [Controller\OrderController::class, 'create']);
         $this->router->get('/orders/{id}', [Controller\OrderController::class, 'show']);
-
-        $this->router->post('/reset-stock', [Controller\CatalogController::class, 'resetStock']);
-
-        $this->router->post('/webhook/payment', [Controller\WebhookController::class, 'handle']);
+        $this->router->get('/orders/{id}/state', [Controller\OrderController::class, 'stateAt']);
 
         $this->router->get('/catalog', [Controller\CatalogController::class, 'index']);
+        $this->router->post('/reset-db', [Controller\CatalogController::class, 'resetDB']);
+
+        $this->router->post('/webhook/payment', [Controller\WebhookController::class, 'handle']);
 
         $this->router->get('/health', static fn () => ApiResponse::success(['status' => 'ok']));
     }

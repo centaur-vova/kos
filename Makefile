@@ -15,7 +15,8 @@
 	reset-stock \
 	empty-stock \
 	clean-orders \
-	clean
+	clean \
+	behat-focus
 
 # Запуск
 app-shell:
@@ -69,3 +70,6 @@ clean-orders:
 	docker compose exec postgres psql -U app -d game_shop -c "TRUNCATE deliveries, payments, refunds, order_items, order_events, supplier_queue, orders RESTART IDENTITY CASCADE; UPDATE products SET reserved = 0;"
 
 clean: reset-stock clean-orders
+
+behat-focus:
+	docker compose exec app vendor/bin/behat --tags focus

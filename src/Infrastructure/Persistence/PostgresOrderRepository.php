@@ -177,4 +177,12 @@ final readonly class PostgresOrderRepository implements OrderRepository
             return $stmt->fetchAll();
         });
     }
+
+    public function truncateOrders(): void
+    {
+        $this->db->withConnection(function (PDO|PDOProxy $pdo) {
+            // Выполняем атомарный сброс рантайма базы данных
+            $pdo->exec("TRUNCATE TABLE orders, order_items, order_events RESTART IDENTITY CASCADE");
+        });
+    }
 }

@@ -6,12 +6,14 @@ namespace App;
 
 use App\Config\Options;
 use App\Controller\ProviderMockController;
+use App\Domain\Repository\OrderEventRepository;
 use App\Domain\Repository\OrderItemRepository;
 use App\Domain\Repository\OrderRepository;
 use App\Domain\Repository\PaymentRepository;
 use App\Domain\Repository\ProductRepository;
 use App\Domain\Repository\ReconciliationRepository;
 use App\Domain\Repository\RefundRepository;
+use App\Infrastructure\Persistence\PostgresOrderEventRepository;
 use App\Infrastructure\Persistence\PostgresOrderItemRepository;
 use App\Infrastructure\Persistence\PostgresOrderRepository;
 use App\Infrastructure\Persistence\PostgresPaymentRepository;
@@ -57,6 +59,7 @@ final class Container
             PaymentRepository::class => get(PostgresPaymentRepository::class),
             ProductRepository::class => get(PostgresProductRepository::class),
             ReconciliationRepository::class => get(PostgresReconciliationRepository::class),
+            OrderEventRepository::class => get(PostgresOrderEventRepository::class),
 
             // Controller(s)
             ProviderMockController::class => autowire(ProviderMockController::class),

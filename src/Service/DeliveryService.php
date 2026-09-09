@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Domain\Repository\OrderItemRepository;
 use App\Domain\Repository\OrderRepository;
 use App\Domain\Repository\RefundRepository;
+use App\Enum\OrderEventType;
 use App\Enum\OrderItemStatus;
 use App\Enum\OrderStatus;
 use Psr\Log\LoggerInterface;
@@ -19,7 +20,8 @@ final readonly class DeliveryService
         private OrderItemRepository $orderItemRepository,
         private OrderRepository $orderRepository,
         private RefundRepository $refundRepository,
-        private ItemDeliveryProcessor $itemProcessor, // Наш новый чистый процессор
+        private ItemDeliveryProcessor $itemProcessor,
+        private EventSourcingService $eventSourcingService,
         private LockService $lockService,
         private LoggerInterface $logger,
     ) {
@@ -73,21 +75,45 @@ final readonly class DeliveryService
         // Сценарий 1: Все товары успешно выданы
         if ($stats['delivered'] === $stats['total']) {
             $this->orderRepository->updateStatus($orderId, OrderStatus::Delivered);
+
+            // Логируем эвент закрытия Саги!
+            $this->eventSourcingService->record($orderId, OrderEventType::OrderDelivered, [
+                'delivered_at' => date('c'),
+                'total_items' => $stats['total']
+            ]);
             return;
         }
 
-        // Сценарий 2: Часть товаров выдать не удалось — запускаем честный поштучный рефанд центов (Пункт 2 ТЗ)
+        // Сценарий 2: Часть товаров упала — запускаем рефанды
         $failedItems = $this->orderItemRepository->findFailedByOrderId($orderId);
         foreach ($failedItems as $item) {
             $this->refundRepository->createForItem($item['id'], (int)$item['price_cents']);
             $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::Refunded);
+
+            // Логируем поштучный рефанд для сведения балансов!
+            $this->eventSourcingService->record($orderId, OrderEventType::ItemRefunded, [
+                'order_item_id' => $item['id'],
+                'sku' => $item['sku'],
+                'refund_amount_cents' => (int)$item['price_cents']
+            ]);
         }
 
-        // Переводим сам заказ в правильный итоговый статус
+        // Переводим сам заказ в правильный итоговый статус и пишем финальный эвент
         if ($stats['delivered'] > 0) {
             $this->orderRepository->updateStatus($orderId, OrderStatus::PartiallyDelivered);
+
+            $this->eventSourcingService->record($orderId, OrderEventType::OrderPartiallyDelivered, [
+                'total_items' => $stats['total'],
+                'delivered_count' => $stats['delivered'],
+                'refunded_count' => count($failedItems)
+            ]);
         } else {
             $this->orderRepository->updateStatus($orderId, OrderStatus::DeliveryFailed);
+
+            $this->eventSourcingService->record($orderId, OrderEventType::OrderDeliveryFailed, [
+                'reason' => 'All providers out of stock or timed out',
+                'failed_at' => date('c')
+            ]);
         }
     }
 }

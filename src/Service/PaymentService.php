@@ -8,6 +8,7 @@ use App\Domain\Repository\OrderRepository;
 use App\Domain\Repository\PaymentRepository;
 use App\DTO\PaymentProcessingResult;
 use App\DTO\PaymentWebhook;
+use App\Enum\OrderEventType;
 use App\Enum\OrderStatus;
 use Psr\Log\LoggerInterface;
 
@@ -16,6 +17,7 @@ final readonly class PaymentService
     public function __construct(
         private OrderRepository $orderRepository,
         private PaymentRepository $paymentRepository,
+        private EventSourcingService $eventSourcingService,
         private DeliveryService $deliveryService,
         private LoggerInterface $logger,
     ) {
@@ -74,6 +76,17 @@ final readonly class PaymentService
             );
 
             if ($updated) {
+                $this->eventSourcingService->record(
+                    $order['id'],
+                    OrderEventType::OrderPaid,
+                    [
+                        'event_id' => $webhook->eventId,
+                        'amount_cents' => (int)round($webhook->amount * 100),
+                        'currency' => $webhook->currency,
+                        'paid_at' => date('c'),
+                    ]
+                );
+
                 return PaymentProcessingResult::processed('pending');
             }
 
@@ -86,6 +99,16 @@ final readonly class PaymentService
                 OrderStatus::PaymentFailed,
                 OrderStatus::Created,
                 $order['version'],
+            );
+
+            $this->eventSourcingService->record(
+                $order['id'],
+                OrderEventType::OrderPaymentFailed,
+                [
+                    'event_id' => $webhook->eventId,
+                    'reason' => 'Gateway payment rejection',
+                    'failed_at' => date('c'),
+                ]
             );
 
             return PaymentProcessingResult::paymentFailed();

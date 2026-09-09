@@ -16,6 +16,41 @@ final readonly class ProviderMockConfig
     ) {
     }
 
+    public static function create(): self
+    {
+        return new self();
+    }
+
+    public static function createDefault(): self
+    {
+        return new self(0, 0, 0, [], null);
+    }
+
+    public function withErrorRate(int $rate): self
+    {
+        return new self($rate, $this->timeoutRate, $this->dishonestRate, $this->blockedSkus, $this->forceDuplicateCode);
+    }
+
+    public function withTimeoutRate(int $rate): self
+    {
+        return new self($this->errorRate, $rate, $this->dishonestRate, $this->blockedSkus, $this->forceDuplicateCode);
+    }
+
+    public function withDishonestRate(int $rate): self
+    {
+        return new self($this->errorRate, $this->timeoutRate, $rate, $this->blockedSkus, $this->forceDuplicateCode);
+    }
+
+    public function withBlockedSkus(array $skus): self
+    {
+        return new self($this->errorRate, $this->timeoutRate, $this->dishonestRate, $skus, $this->forceDuplicateCode);
+    }
+
+    public function withForceDuplicateCode(?string $code): self
+    {
+        return new self($this->errorRate, $this->timeoutRate, $this->dishonestRate, $this->blockedSkus, $code);
+    }
+
     public function merge(array $data): self
     {
         return new self(
@@ -34,7 +69,7 @@ final readonly class ProviderMockConfig
             timeoutRate: (int)($data['timeout_rate'] ?? 0),
             dishonestRate: (int)($data['dishonest_rate'] ?? 0),
             blockedSkus: isset($data['blocked_skus']) ? (array)$data['blocked_skus'] : [],
-            forceDuplicateCode: isset($data['force_duplicate_code']) ? (string)$data['force_duplicate_code'] : null,
+            forceDuplicateCode: !empty($data['force_duplicate_code']) ? (string)$data['force_duplicate_code'] : null,
         );
     }
 
@@ -57,6 +92,7 @@ final readonly class ProviderMockConfig
     public static function fromJson(string $json): self
     {
         $data = json_decode($json, true);
+        // Защита: если json пустой или невалидный, принудительно инициализируем дефолты
         return self::fromArray(is_array($data) ? $data : []);
     }
 

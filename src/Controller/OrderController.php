@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\DTO\OrderItem;
 use App\Http\ApiResponse;
+use App\Service\EventSourcingService;
 use Swoole\Http\Request;
 use App\Service\OrderService;
 use Psr\Log\LoggerInterface;
@@ -15,6 +16,7 @@ final readonly class OrderController
     public function __construct(
         private OrderService $orderService,
         private LoggerInterface $logger,
+        private EventSourcingService $eventSourcingService,
     ) {
     }
 
@@ -67,4 +69,44 @@ final readonly class OrderController
 
         return ApiResponse::success(['order' => $order]);
     }
+
+    public function stateAt(Request $request, array $params): ApiResponse
+    {
+        $orderCode = $params['id'] ?? null;
+        $date = $request->get['until'] ?? null;
+
+        if (!$orderCode || !$date) {
+            return ApiResponse::error('Order code and until date are required', 400);
+        }
+
+        $order = $this->orderService->getById($orderCode);
+        if (!$order) {
+            return ApiResponse::error('Order not found', 404, 'order_not_found');
+        }
+
+        // Передаем чистый UUID объекта и строку даты со смещением
+        $state = $this->eventSourcingService->getStateAt($order->id, $date);
+
+        return ApiResponse::success(['state' => $state]);
+    }
+
+
+    public function events(Request $request, array $params): ApiResponse
+    {
+        $orderCode = $params['id'] ?? null;
+
+        if (!$orderCode) {
+            return ApiResponse::error('Order code required', 400);
+        }
+
+        $order = $this->orderService->getById($orderCode);
+        if (!$order) {
+            return ApiResponse::error('Order not found', 404, 'order_not_found');
+        }
+
+        $events = $this->eventSourcingService->getEventStreamByOrderId($order->id);
+
+        return ApiResponse::success(['events' => $events]);
+    }
+
 }

@@ -22,9 +22,6 @@ final readonly class ItemDeliveryProcessor
     ) {
     }
 
-    /**
-     * Изолированный асинхронный процесс выдачи ОДНОГО конкретного товара
-     */
     public function process(array $item): bool
     {
         $currentProvider = $this->options->getFirstProvider();
@@ -32,6 +29,8 @@ final readonly class ItemDeliveryProcessor
 
         while ($currentProvider !== null) {
             $requestId = "req_{$item['id']}-" . ($attemptCount + 1);
+
+            // Задаем промежуточный статус "В процессе доставки"
             $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::Delivering);
 
             $this->logger->info('Attempting item delivery', [
@@ -49,29 +48,24 @@ final readonly class ItemDeliveryProcessor
                 );
 
                 if ($result['status'] === 'ok') {
-                    $success = $this->finalizeSuccess($item, $result['code'], $currentProvider->name, $requestId);
-
-                    if ($success) {
+                    // Если код прошел валидацию — Сага для этого айтема успешно завершена!
+                    if ($this->finalizeSuccess($item, $result['code'], $currentProvider->name, $requestId)) {
                         return true;
                     }
 
-                    // Код плохой — идём к следующему провайдеру
-                    $currentProvider = $this->options->getNextProvider($currentProvider->name);
-                    $attemptCount++;
-                    continue;
+                    // Если код грязный (фрод) — не меняем статус айтема на фейл, а просто идем к фоллбэку!
+                    $this->logger->warning('Provider returned bad code, switching to fallback', ['provider' => $currentProvider->name]);
                 }
 
-                if ($result['reason'] === 'out_of_stock') {
+                if (($result['reason'] ?? '') === 'out_of_stock') {
                     $this->logger->warning('Provider out of stock, switching to fallback immediately', [
                         'sku' => $item['sku'],
                         'provider' => $currentProvider->name,
                     ]);
-                    $currentProvider = $this->options->getNextProvider($currentProvider->name);
-                    $attemptCount++;
-                    continue;
                 }
 
             } catch (ProviderTimeoutException $e) {
+                // Если ретраи увенчались успехом — выходим
                 if ($this->executeNetworkRetries($item, $requestId, $currentProvider->name)) {
                     return true;
                 }
@@ -82,10 +76,12 @@ final readonly class ItemDeliveryProcessor
                 ]);
             }
 
+            // Переключаемся на следующего фоллбэк-провайдера
             $currentProvider = $this->options->getNextProvider($currentProvider->name);
             $attemptCount++;
         }
 
+        // Строго здесь: ЕСЛИ НИ ОДИН провайдер не справился, фиксируем финальный фейл позиции!
         $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::DeliveryFailed);
         return false;
     }
@@ -114,20 +110,21 @@ final readonly class ItemDeliveryProcessor
                 );
 
                 if ($result['status'] === 'ok') {
-                    $success = $this->finalizeSuccess($item, $result['code'], $providerName, $requestId);
-
-                    if ($success) {
+                    if ($this->finalizeSuccess($item, $result['code'], $providerName, $requestId)) {
                         return true;
                     }
+                    return false; // Код грязный, ретраить этого провайдера бессмысленно
+                }
 
-                    // Плохой код — fallback
+                // Если получили явный текстовый отказ (например out_of_stock) — прекращаем ретраи сети
+                if (($result['reason'] ?? '') === 'out_of_stock') {
                     return false;
                 }
-                return false;
+
             } catch (ProviderTimeoutException) {
-                continue;
+                continue; // Снова таймаут — послушно идем на следующий шаг цикла ретраев
             } catch (\Throwable) {
-                return false;
+                return false; // Любая другая критическая ошибка — выходим на фоллбэк
             }
         }
         return false;
@@ -135,28 +132,26 @@ final readonly class ItemDeliveryProcessor
 
     private function finalizeSuccess(array $item, string $code, string $provider, string $requestId): bool
     {
-        // 1. Идемпотентность: проверяем дубликат кода
+        // 1. Идемпотентность: проверяем дубликат кода в нашей БД
         $existing = $this->orderItemRepository->findByDeliveredCode($code);
         if ($existing) {
             $this->logger->critical('DISHONEST PROVIDER DETECTED: Code hijacked!', [
                 'code' => $code,
                 'item_id' => $item['id'],
             ]);
-            $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::DeliveryFailed);
-            return false;
+            return false; // Просто возвращаем false, статус в базе не пачкаем!
         }
 
-        // 2. Валидация формата
+        // 2. Валидация формата маски цифрового товара
         if (!$this->isValidCodeFormat($code, $item['sku'])) {
             $this->logger->error('Invalid code format returned from provider', [
                 'code' => $code,
                 'sku' => $item['sku'],
             ]);
-            $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::DeliveryFailed);
-            return false;
+            return false; // Ошибочный формат, отдаем управление фоллбэку
         }
 
-        // 3. Успешная маркировка
+        // 3. Успешная маркировка и фиксация в БД
         $this->orderItemRepository->markDelivered($item['id'], $code, $provider, $requestId);
         return true;
     }
