@@ -11,7 +11,7 @@
 
 - PHP 8.4 + Swoole 6.2 (корутины, shared memory)
 - PostgreSQL 16 (ACID, транзакции, JSONB)
-- Swoole Table (идемпотентность, блокировки)
+- Swoole Table (кэш идемпотентности, блокировки)
 - Docker + Docker Compose
 - Behat (Gherkin-сценарии)
 
@@ -162,7 +162,7 @@ GET /catalog?limit=100&offset=0
 │ ├── Infrastructure/
 │ │ └── Persistence/ # Реализации репозиториев
 │ ├── Service/ # Бизнес-логика
-│ ├── Storage/ # Swoole Table (shared memory)
+│ ├── Storage/ # Swoole Table, LockerInterface
 │ └── Support/ # Логгер
 └── tests/ # Behat-контекст
 ```
@@ -173,5 +173,6 @@ GET /catalog?limit=100&offset=0
 - **Event Bus** — события пишутся напрямую в БД, без outbox pattern
 - **Rate limiting** — для очередей поставщиков потребуется Redis
 - **Деньги как float** — в проде moneyphp/money
+- **Лок в памяти не атомарен** — реальная защита в constraint'ах БД, в проде — Redis
 
 Подробнее о ключевых решениях — в [SOLUTION.md](SOLUTION.md).

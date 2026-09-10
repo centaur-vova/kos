@@ -23,7 +23,9 @@ use App\Infrastructure\Persistence\PostgresRefundRepository;
 use DI\ContainerBuilder;
 use Psr\Log\LoggerInterface;
 use App\Service\ProviderClient;
+use App\Storage\LockerInterface;
 use App\Storage\StorageInterface;
+use App\Storage\SwooleTableLocker;
 use App\Storage\SwooleTableStorage;
 use App\Support\StdoutLogger;
 
@@ -43,9 +45,10 @@ final class Container
         $builder->addDefinitions([
             Options::class => $options,
 
-            // Storage
+            // Storage/locks
             SwooleTableStorage::class => static fn () => new SwooleTableStorage($options),
             StorageInterface::class => get(SwooleTableStorage::class),
+            LockerInterface::class => get(SwooleTableLocker::class),
 
             // Server/infra
             LoggerInterface::class => static fn () => new StdoutLogger($options->logLevel),

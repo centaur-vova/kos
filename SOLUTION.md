@@ -39,7 +39,7 @@
 Паттерны:
 
 - DI через PHP-DI
-- `LockService` — блокировки на заказ
+- `LockerInterface` / `SwooleTableLocker` — блокировки на заказ
 - Anti-Corruption Layer — `PaymentWebhook::fromArray()` изолирует внешний формат платёжки
 - Saga Pattern — `DeliveryService` с параллельной выдачей и компенсациями
 - Event Sourcing — append-only журнал в `order_events`
@@ -50,10 +50,10 @@
 
 **Решение** — двойная защита:
 
-1. `Swoole\Table` — быстрый барьер в памяти.
-2. Уникальный constraint `payments.event_id` — гарантия на уровне БД.
+1. `Swoole\Table` — быстрый кэш обработанных `event_id`, снижает нагрузку на БД при повторах.
+2. Уникальный constraint `payments.event_id` — гарантия exactly-once на уровне БД.
 
-При гонке первый вебхук проходит, остальные получают `UNIQUE_VIOLATION` и возвращают `already_processed_race`.
+**Оговорка.** `SwooleTableLocker::acquire` и `SwooleTableStorage::set` не атомарны: между `has()` и `set()` есть окно, поэтому при жёсткой конкуренции кэш может пропустить дубль. Реальная защита от гонок — constraint'ы в БД. В проде — Redis с `SET NX EX` или `Swoole\Table::incr` с TTL-колонкой.
 
 ## Exactly-once под гонками
 
@@ -122,7 +122,7 @@
 - `RecoveryService` — фоновая задача через `Swoole\Timer`.
 - Индекс `idx_orders_stuck_states` для быстрого поиска.
 
-**Почему не очередь.** В проде recovery, выдача и рефанды шли бы через очередь (NATS/RabbitMQ/Redis Streams) с воркерами per-provider и rate limit — это дало бы естественную идемпотентность, повторы с бэкоффом и горизонтальное масштабирование. В тестовом задании очередь осознанно не тянется: нет Redis/RabbitMQ в стеке, ТЗ не требует мультиинстанса, а `LockService` + идемпотентность в БД + `Swoole\Timer` покрывают все сценарии для одного процесса. При переходе в прод `RecoveryService` превращается в `publish(order_id)`, `DeliveryService` — в воркер.
+**Почему не очередь.** В проде recovery, выдача и рефанды шли бы через очередь (NATS/RabbitMQ/Redis Streams) с воркерами per-provider и rate limit — это дало бы естественную идемпотентность, повторы с бэкоффом и горизонтальное масштабирование. В тестовом задании очередь осознанно не тянется: нет Redis/RabbitMQ в стеке, ТЗ не требует мультиинстанса, а `SwooleTableLocker` + идемпотентность в БД + `Swoole\Timer` покрывают все сценарии для одного процесса. При переходе в прод `RecoveryService` превращается в `publish(order_id)`, `DeliveryService` — в воркер.
 
 ## Каталог под нагрузкой
 
@@ -138,6 +138,7 @@
 - **Деньги как float** — в проде moneyphp/money.
 - **Repository pattern** — SQL местами в сервисах, в проде вынес бы.
 - **Гонка ретраев** — в проде `FOR UPDATE` на заказе вокруг всего цикла выдачи.
+- **Лок в памяти не атомарен.** `SwooleTableLocker` использует `has()` + `set()`, между ними есть окно для гонки. Реальная защита — constraint'ы в БД, в проде — Redis `SET NX EX`.
 
 ## Что нужно для прода
 

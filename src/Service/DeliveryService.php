@@ -10,6 +10,7 @@ use App\Domain\Repository\RefundRepository;
 use App\Enum\OrderEventType;
 use App\Enum\OrderItemStatus;
 use App\Enum\OrderStatus;
+use App\Storage\LockerInterface;
 use Psr\Log\LoggerInterface;
 use Swoole\Coroutine\Barrier;
 use Swoole\Coroutine;
@@ -22,7 +23,7 @@ final readonly class DeliveryService
         private RefundRepository $refundRepository,
         private ItemDeliveryProcessor $itemProcessor,
         private EventSourcingService $eventSourcingService,
-        private LockService $lockService,
+        private LockerInterface $locker,
         private LoggerInterface $logger,
     ) {
     }
@@ -41,7 +42,7 @@ final readonly class DeliveryService
         $this->logger->info('Starting parallel order delivery saga', ['order_id' => $orderId]);
         $lockKey = "delivery:lock:{$orderId}";
 
-        $acquired = $this->lockService->withLock($lockKey, function () use ($orderId) {
+        $acquired = $this->locker->withLock($lockKey, function () use ($orderId) {
             // Выбираем и pending, и застрявшие в процессе 'delivering' для поддержки восстановления (Пункт 5 ТЗ)
             $items = $this->orderItemRepository->findUnfinishedByOrderId($orderId);
             if (!empty($items)) {
