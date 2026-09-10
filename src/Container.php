@@ -25,6 +25,7 @@ use Psr\Log\LoggerInterface;
 use App\Service\ProviderClient;
 use App\Storage\LockerInterface;
 use App\Storage\StorageInterface;
+use App\Storage\StorageTable;
 use App\Storage\SwooleTableLocker;
 use App\Storage\SwooleTableStorage;
 use App\Support\StdoutLogger;
@@ -36,7 +37,7 @@ final class Container
 {
     private static \DI\Container $container;
 
-    public static function init(Options $options): void
+    public static function init(Options $options, StorageTable $storageTable): void
     {
         $builder = new ContainerBuilder();
 
@@ -44,9 +45,10 @@ final class Container
 
         $builder->addDefinitions([
             Options::class => $options,
+            StorageTable::class => $storageTable,
 
             // Storage/locks
-            SwooleTableStorage::class => static fn () => new SwooleTableStorage($options),
+            SwooleTableStorage::class => static fn () => new SwooleTableStorage($storageTable),
             StorageInterface::class => get(SwooleTableStorage::class),
             LockerInterface::class => get(SwooleTableLocker::class),
 

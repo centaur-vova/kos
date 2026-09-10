@@ -9,6 +9,7 @@ use App\Application;
 use App\Bootstrap;
 use App\Container;
 use App\Service\RecoveryService;
+use App\Storage\StorageTable;
 use Psr\Log\LoggerInterface;
 
 error_reporting(E_ALL);
@@ -17,11 +18,11 @@ ini_set('log_errors', '0');
 
 require __DIR__ . '/../vendor/autoload.php';
 
-// Включаем корутины
-Swoole\Runtime::enableCoroutine(SWOOLE_HOOK_ALL);
-
 // Загружаем конфиг
 $options = Bootstrap::init(__DIR__ . '/..');
+
+// Создадим Swoole Table в shared mem до форка воркеров
+$storageTable = new StorageTable($options->swooleStorageTableSize);
 
 $server = new Server(
     host: $options->serverHost,
@@ -41,14 +42,15 @@ $server->on('start', function (Server $server) {
 });
 
 // ГЛАВНЫЙ ХУК: Инициализация рантайма каждого отдельного Воркера
-$server->on('workerStart', function (Server $server, int $workerId) use ($options) {
+$server->on('workerStart', function (Server $server, int $workerId) use ($options, $storageTable) {
     // Включаем корутины и хуки для PDO/сетевого рантайма строго внутри воркера
     Swoole\Runtime::enableCoroutine(SWOOLE_HOOK_ALL);
 
     // Инициализируем DI-контейнер ИЗОЛИРОВАННО для этого процесса воркера!
-    Container::init($options);
+    Container::init($options, $storageTable);
 
     // Получаем логгер для текущего воркера
+    /** @var LoggerInterface $logger */
     $logger = Container::get(LoggerInterface::class);
     $logger->info("Worker #{$workerId} initialized");
 

@@ -4,19 +4,10 @@ declare(strict_types=1);
 
 namespace App\Storage;
 
-use App\Config\Options;
-use Swoole\Table;
-
 final class SwooleTableStorage implements StorageInterface
 {
-    private Table $table;
-
-    public function __construct(Options $options)
+    public function __construct(private StorageTable $table)
     {
-        $this->table = new Table($options->swooleStorageTableSize);
-        $this->table->column('value', Table::TYPE_STRING, 255);
-        $this->table->column('ttl', Table::TYPE_INT, 4);
-        $this->table->create();
     }
 
     public function get(string $key, mixed $default = null): mixed
