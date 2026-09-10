@@ -404,14 +404,6 @@ final class FeatureContext implements Context
     }
 
     /**
-     * @Then /^система логирует "([^"]*)"$/
-     */
-    public function systemLogs(string $message): void
-    {
-        // TODO: еще предстоит сделать
-    }
-
-    /**
      * @Then /^позиция помечается как "([^"]*)" за счет поставщика B$/
      */
     public function positionMarkedAsDeliveredWithProvider(string $status): void
