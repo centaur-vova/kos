@@ -41,7 +41,7 @@ final readonly class DeliveryService
         $this->logger->info('Starting parallel order delivery saga', ['order_id' => $orderId]);
         $lockKey = "delivery:lock:{$orderId}";
 
-        $this->lockService->withLock($lockKey, function () use ($orderId) {
+        $acquired = $this->lockService->withLock($lockKey, function () use ($orderId) {
             // Выбираем и pending, и застрявшие в процессе 'delivering' для поддержки восстановления (Пункт 5 ТЗ)
             $items = $this->orderItemRepository->findUnfinishedByOrderId($orderId);
             if (empty($items)) {
@@ -65,6 +65,13 @@ final readonly class DeliveryService
             // Финализируем финансовые итоги заказа (Пункт 2 и 3 ТЗ)
             $this->finalizeOrderState($orderId);
         });
+
+        if (!$acquired) {
+            $this->logger->warning('Delivery lock busy, skipping', [
+                'order_id' => $orderId,
+                'lock_key' => $lockKey,
+            ]);
+        }
     }
 
     private function finalizeOrderState(string $orderId): void
