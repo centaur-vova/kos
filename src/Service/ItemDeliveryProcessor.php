@@ -9,6 +9,7 @@ use App\Domain\Repository\OrderItemRepository;
 use App\Enum\OrderItemStatus;
 use App\Exception\Provider\ProviderException;
 use App\Exception\Provider\ProviderTimeoutException;
+use PDOException;
 use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 
@@ -28,10 +29,10 @@ final readonly class ItemDeliveryProcessor
         $attemptCount = 0;
 
         while ($currentProvider !== null) {
-            // ВАЖНО: requestId уникален для КАЖДОГО провайдера, чтобы идемпотентность A не сработала при fallback на B
+            // requestId уникален для каждого провайдера: идемпотентность A
+            // не должна срабатывать при fallback на B
             $requestId = "req_{$item['id']}-{$currentProvider->name}-" . ($attemptCount + 1);
 
-            // Задаем промежуточный статус "В процессе доставки"
             $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::Delivering);
 
             $this->logger->info('Attempting item delivery', [
@@ -49,24 +50,24 @@ final readonly class ItemDeliveryProcessor
                 );
 
                 if ($result['status'] === 'ok') {
-                    // Если код прошел валидацию — Сага для этого айтема успешно завершена!
                     if ($this->finalizeSuccess($item, $result['code'], $currentProvider->name, $requestId)) {
                         return true;
                     }
 
-                    // Если код грязный (фрод) — не меняем статус айтема на фейл, а просто идем к фоллбэку!
-                    $this->logger->warning('Provider returned bad code, switching to fallback', ['provider' => $currentProvider->name]);
-                }
-
-                if (($result['reason'] ?? '') === 'out_of_stock') {
-                    $this->logger->warning('Provider out of stock, switching to fallback immediately', [
-                        'sku' => $item['sku'],
+                    // Код грязный (фрод или неверная маска) — идём к следующему провайдеру
+                    $this->logger->warning('Provider returned bad code, switching to fallback', [
                         'provider' => $currentProvider->name,
                     ]);
                 }
 
-                // НОВОЕ: Обработка HTTP 500 как fallback-триггера
-                if (($result['reason'] ?? '') === 'internal_server_error') {
+                // Явные отказы поставщика — сразу к следующему провайдеру
+                $reason = $result['reason'] ?? '';
+                if ($reason === 'out_of_stock') {
+                    $this->logger->warning('Provider out of stock, switching to fallback', [
+                        'sku' => $item['sku'],
+                        'provider' => $currentProvider->name,
+                    ]);
+                } elseif ($reason === 'internal_server_error') {
                     $this->logger->warning('Provider returned 500, switching to fallback', [
                         'sku' => $item['sku'],
                         'provider' => $currentProvider->name,
@@ -74,10 +75,17 @@ final readonly class ItemDeliveryProcessor
                 }
 
             } catch (ProviderTimeoutException $e) {
-                // Если ретраи увенчались успехом — выходим
                 if ($this->executeNetworkRetries($item, $requestId, $currentProvider->name)) {
                     return true;
                 }
+
+                // Поставщик мог успеть выдать код, но ответ не дошёл.
+                // Переходим к fallback, но фиксируем это в логах для сверки.
+                $this->logger->warning('Provider timed out after retries, may have issued code', [
+                    'item_id' => $item['id'],
+                    'provider' => $currentProvider->name,
+                    'request_id' => $requestId,
+                ]);
             } catch (ProviderException $e) {
                 $this->logger->error('Provider integration error', [
                     'provider' => $currentProvider->name,
@@ -85,12 +93,11 @@ final readonly class ItemDeliveryProcessor
                 ]);
             }
 
-            // Переключаемся на следующего фоллбэк-провайдера
             $currentProvider = $this->options->getNextProvider($currentProvider->name);
             $attemptCount++;
         }
 
-        // Строго здесь: ЕСЛИ НИ ОДИН провайдер не справился, фиксируем финальный фейл позиции!
+        // Ни один провайдер не справился — финальный фейл позиции
         $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::DeliveryFailed);
         return false;
     }
@@ -111,7 +118,7 @@ final readonly class ItemDeliveryProcessor
             ]);
 
             try {
-                // ВАЖНО: В ретраях используем ТОТ ЖЕ requestId, чтобы идемпотентность работала
+                // Тот же requestId: идемпотентность поставщика вернёт тот же код
                 $result = $this->providerClient->issue(
                     requestId: $requestId,
                     sku: $item['sku'],
@@ -123,46 +130,61 @@ final readonly class ItemDeliveryProcessor
                     if ($this->finalizeSuccess($item, $result['code'], $providerName, $requestId)) {
                         return true;
                     }
-                    return false; // Код грязный, ретраить этого провайдера бессмысленно
+                    // Код грязный — ретраить этого провайдера бессмысленно
+                    return false;
                 }
 
-                // Если получили явный текстовый отказ (например out_of_stock или 500) — прекращаем ретраи сети
+                // Явный отказ — прекращаем ретраи и идём на fallback
                 if (in_array(($result['reason'] ?? ''), ['out_of_stock', 'internal_server_error'], true)) {
                     return false;
                 }
 
             } catch (ProviderTimeoutException) {
-                continue; // Снова таймаут — послушно идем на следующий шаг цикла ретраев
+                continue;
             } catch (\Throwable) {
-                return false; // Любая другая критическая ошибка — выходим на фоллбэк
+                return false;
             }
         }
+
         return false;
     }
 
     private function finalizeSuccess(array $item, string $code, string $provider, string $requestId): bool
     {
-        // 1. Идемпотентность: проверяем дубликат кода в нашей БД
+        // 1. Проверка дубликата кода в нашей БД
         $existing = $this->orderItemRepository->findByDeliveredCode($code);
         if ($existing) {
-            $this->logger->critical('DISHONEST PROVIDER DETECTED: Code hijacked!', [
+            $this->logger->critical('Dishonest provider detected: code already used', [
                 'code' => $code,
                 'item_id' => $item['id'],
             ]);
-            return false; // Просто возвращаем false, статус в базе не пачкаем!
+            return false;
         }
 
-        // 2. Валидация формата маски цифрового товара
+        // 2. Валидация формата маски
         if (!$this->isValidCodeFormat($code, $item['sku'])) {
             $this->logger->error('Invalid code format returned from provider', [
                 'code' => $code,
                 'sku' => $item['sku'],
             ]);
-            return false; // Ошибочный формат, отдаем управление фоллбэку
+            return false;
         }
 
-        // 3. Успешная маркировка и фиксация в БД
-        $this->orderItemRepository->markDelivered($item['id'], $code, $provider, $requestId);
+        // 3. Запись в БД. Уникальный constraint delivered_code ловит гонку,
+        // если два заказа одновременно получили один код.
+        try {
+            $this->orderItemRepository->markDelivered($item['id'], $code, $provider, $requestId);
+        } catch (PDOException $e) {
+            if ($e->getCode() === '23505') {
+                $this->logger->critical('Race on delivered_code, blocked by unique constraint', [
+                    'code' => $code,
+                    'item_id' => $item['id'],
+                ]);
+                return false;
+            }
+            throw $e;
+        }
+
         return true;
     }
 
@@ -171,6 +193,7 @@ final readonly class ItemDeliveryProcessor
         if (str_starts_with($sku, 'STEAM-TOPUP') || str_starts_with($sku, 'GIFT-')) {
             return str_starts_with($code, 'TOPUP-');
         }
+
         return (bool)preg_match('/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/', $code);
     }
 }

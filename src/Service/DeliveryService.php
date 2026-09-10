@@ -29,7 +29,7 @@ final readonly class DeliveryService
 
     public function deliverByOrderCode(string $orderCode): void
     {
-        $this->logger->info('deliverByOrderCode invoked', ['order_code' => $orderCode]);
+        $this->logger->debug('deliverByOrderCode invoked', ['order_code' => $orderCode]);
         $order = $this->orderRepository->findByOrderCode($orderCode);
         if ($order) {
             $this->deliver($order['id']);
@@ -44,23 +44,21 @@ final readonly class DeliveryService
         $acquired = $this->lockService->withLock($lockKey, function () use ($orderId) {
             // Выбираем и pending, и застрявшие в процессе 'delivering' для поддержки восстановления (Пункт 5 ТЗ)
             $items = $this->orderItemRepository->findUnfinishedByOrderId($orderId);
-            if (empty($items)) {
-                return;
+            if (!empty($items)) {
+                // Параллельная выдача позиций через корутины с барьером
+                $barrier = Barrier::make();
+
+                foreach ($items as $item) {
+                    // Каждый товар из заказа начинает выбивать свой цифровой код параллельно!
+                    // $barrier в use для учета refcount (магия автоматической защелки Swoole)
+                    Coroutine::create(function () use ($item, $barrier) {
+                        $this->itemProcessor->process($item);
+                    });
+                }
+
+                // Асинхронно ждем, пока завершатся абсолютно все корутины выдачи айтемов
+                Barrier::wait($barrier);
             }
-
-            // НАСТОЯЩИЙ HIGH-LOAD: создаем барьер Swoole для параллельного запуска корутин!
-            $barrier = Barrier::make();
-
-            foreach ($items as $item) {
-                // Каждый товар из заказа начинает выбивать свой цифровой код ПАРАЛЛЕЛЬНО!
-                // $barrier в use для учета refcount (магия автоматической защелки Swoole)
-                Coroutine::create(function () use ($item, $barrier) {
-                    $this->itemProcessor->process($item);
-                });
-            }
-
-            // Асинхронно ждем, пока завершатся абсолютно все корутины выдачи айтемов
-            Barrier::wait($barrier);
 
             // Финализируем финансовые итоги заказа (Пункт 2 и 3 ТЗ)
             $this->finalizeOrderState($orderId);
