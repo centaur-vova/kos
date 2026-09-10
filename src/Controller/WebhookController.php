@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\DTO\PaymentWebhook;
+use App\DTO\Payment\PaymentWebhook;
 use App\Exception\DomainException;
 use App\Http\ApiResponse;
 use Swoole\Http\Request;

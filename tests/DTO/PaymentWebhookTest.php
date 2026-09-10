@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\DTO;
 
-use App\DTO\PaymentWebhook;
+use App\DTO\Payment\PaymentWebhook;
 use PHPUnit\Framework\TestCase;
 
 final class PaymentWebhookTest extends TestCase

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Behat;
 
 use Behat\Behat\Context\Context;
-use App\DTO\ProviderMockConfig;
+use App\DTO\Provider\ProviderMockConfig;
 use App\Enum\OrderItemStatus;
 use App\Enum\OrderStatus;
 use PDO;

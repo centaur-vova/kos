@@ -6,7 +6,7 @@ namespace App\Infrastructure\Persistence;
 
 use App\Database;
 use App\Domain\Repository\PaymentRepository;
-use App\DTO\PaymentWebhook;
+use App\DTO\Payment\PaymentWebhook;
 use PDO;
 use Swoole\Database\PDOProxy;
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Repository;
 
+use App\DTO\Order\OrderStats;
 use App\Enum\OrderItemStatus;
 
 interface OrderItemRepository
@@ -28,6 +29,5 @@ interface OrderItemRepository
 
     public function markDelivered(string $itemId, string $code, string $provider, string $requestId): void;
 
-    /** @return array{total: int, delivered: int} */
-    public function countByOrderId(string $orderId): array;
+    public function countByOrderId(string $orderId): OrderStats;
 }

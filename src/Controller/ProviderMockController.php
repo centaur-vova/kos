@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Container;
-use App\DTO\ProviderMockConfig;
+use App\DTO\Provider\ProviderMockConfig;
 use App\Storage\StorageInterface;
 use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;

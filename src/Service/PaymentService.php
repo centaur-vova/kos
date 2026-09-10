@@ -6,8 +6,8 @@ namespace App\Service;
 
 use App\Domain\Repository\OrderRepository;
 use App\Domain\Repository\PaymentRepository;
-use App\DTO\PaymentProcessingResult;
-use App\DTO\PaymentWebhook;
+use App\DTO\Payment\PaymentProcessingResult;
+use App\DTO\Payment\PaymentWebhook;
 use App\Enum\OrderEventType;
 use App\Enum\OrderStatus;
 use Psr\Log\LoggerInterface;

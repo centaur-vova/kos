@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Domain\Repository\OrderItemRepository;
 use App\Domain\Repository\OrderRepository;
 use App\Domain\Repository\RefundRepository;
+use App\DTO\Order\OrderStats;
 use App\Enum\OrderEventType;
 use App\Enum\OrderItemStatus;
 use App\Enum\OrderStatus;
@@ -76,50 +77,71 @@ final readonly class DeliveryService
     private function finalizeOrderState(string $orderId): void
     {
         $stats = $this->orderItemRepository->countByOrderId($orderId);
-        $this->logger->info('Order processing stats collected', ['order_id' => $orderId, 'stats' => $stats]);
 
-        // Сценарий 1: Все товары успешно выданы
-        if ($stats['delivered'] === $stats['total']) {
-            $this->orderRepository->updateStatus($orderId, OrderStatus::Delivered);
+        $this->logger->info('Order processing stats collected', [
+            'order_id' => $orderId,
+            'total' => $stats->total,
+            'delivered' => $stats->delivered,
+            'refunded' => $stats->refunded,
+            'failed' => $stats->failed,
+        ]);
 
-            // Логируем эвент закрытия Саги!
-            $this->eventSourcingService->record($orderId, OrderEventType::OrderDelivered, [
-                'delivered_at' => date('c'),
-                'total_items' => $stats['total']
-            ]);
+        if ($stats->isFullyDelivered()) {
+            $this->completeAsDelivered($orderId, $stats);
             return;
         }
 
-        // Сценарий 2: Часть товаров упала — запускаем рефанды
-        $failedItems = $this->orderItemRepository->findFailedByOrderId($orderId);
-        foreach ($failedItems as $item) {
+        $this->refundFailedItems($orderId);
+
+        if ($stats->isPartiallyDelivered()) {
+            $this->completeAsPartiallyDelivered($orderId, $stats);
+        } else {
+            $this->completeAsFailed($orderId, $stats);
+        }
+    }
+
+    private function completeAsDelivered(string $orderId, OrderStats $stats): void
+    {
+        $this->orderRepository->updateStatus($orderId, OrderStatus::Delivered);
+
+        $this->eventSourcingService->record($orderId, OrderEventType::OrderDelivered, [
+            'delivered_at' => date('c'),
+            'total_items' => $stats->total,
+        ]);
+    }
+
+    private function refundFailedItems(string $orderId): void
+    {
+        foreach ($this->orderItemRepository->findFailedByOrderId($orderId) as $item) {
             $this->refundRepository->createForItem($item['id'], (int)$item['price_cents']);
             $this->orderItemRepository->updateStatus($item['id'], OrderItemStatus::Refunded);
 
-            // Логируем поштучный рефанд для сведения балансов!
             $this->eventSourcingService->record($orderId, OrderEventType::ItemRefunded, [
                 'order_item_id' => $item['id'],
                 'sku' => $item['sku'],
-                'refund_amount_cents' => (int)$item['price_cents']
+                'refund_amount_cents' => (int)$item['price_cents'],
             ]);
         }
+    }
 
-        // Переводим сам заказ в правильный итоговый статус и пишем финальный эвент
-        if ($stats['delivered'] > 0) {
-            $this->orderRepository->updateStatus($orderId, OrderStatus::PartiallyDelivered);
+    private function completeAsPartiallyDelivered(string $orderId, OrderStats $stats): void
+    {
+        $this->orderRepository->updateStatus($orderId, OrderStatus::PartiallyDelivered);
 
-            $this->eventSourcingService->record($orderId, OrderEventType::OrderPartiallyDelivered, [
-                'total_items' => $stats['total'],
-                'delivered_count' => $stats['delivered'],
-                'refunded_count' => count($failedItems)
-            ]);
-        } else {
-            $this->orderRepository->updateStatus($orderId, OrderStatus::DeliveryFailed);
+        $this->eventSourcingService->record($orderId, OrderEventType::OrderPartiallyDelivered, [
+            'total_items' => $stats->total,
+            'delivered_count' => $stats->delivered,
+            'refunded_count' => $stats->refunded,
+        ]);
+    }
 
-            $this->eventSourcingService->record($orderId, OrderEventType::OrderDeliveryFailed, [
-                'reason' => 'All providers out of stock or timed out',
-                'failed_at' => date('c')
-            ]);
-        }
+    private function completeAsFailed(string $orderId, OrderStats $stats): void
+    {
+        $this->orderRepository->updateStatus($orderId, OrderStatus::DeliveryFailed);
+
+        $this->eventSourcingService->record($orderId, OrderEventType::OrderDeliveryFailed, [
+            'reason' => 'All providers out of stock or timed out',
+            'failed_at' => date('c'),
+        ]);
     }
 }

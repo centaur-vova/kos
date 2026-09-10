@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Config\Options;
-use App\DTO\PaymentWebhook;
-use App\DTO\PaymentProcessingResult;
+use App\DTO\Payment\PaymentWebhook;
+use App\DTO\Payment\PaymentProcessingResult;
 use App\Storage\StorageInterface;
 use Psr\Log\LoggerInterface;
 

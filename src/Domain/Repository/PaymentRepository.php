@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Repository;
 
-use App\DTO\PaymentWebhook;
+use App\DTO\Payment\PaymentWebhook;
 
 interface PaymentRepository
 {

@@ -6,8 +6,8 @@ namespace App\Service;
 
 use App\Domain\Repository\OrderRepository;
 use App\Domain\Repository\OrderItemRepository;
-use App\DTO\OrderItem;
-use App\DTO\OrderResponse;
+use App\DTO\Order\OrderItem;
+use App\DTO\Order\OrderResponse;
 use App\Enum\OrderEventType;
 use Psr\Log\LoggerInterface;
 

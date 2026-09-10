@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\DTO\OrderItem;
+use App\DTO\Order\OrderItem;
 use App\Http\ApiResponse;
 use App\Service\EventSourcingService;
 use Swoole\Http\Request;

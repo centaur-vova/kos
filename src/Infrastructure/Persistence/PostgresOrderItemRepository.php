@@ -6,6 +6,7 @@ namespace App\Infrastructure\Persistence;
 
 use App\Database;
 use App\Domain\Repository\OrderItemRepository;
+use App\DTO\Order\OrderStats;
 use App\Enum\OrderItemStatus;
 use PDO;
 use Swoole\Database\PDOProxy;
@@ -100,17 +101,20 @@ final readonly class PostgresOrderItemRepository implements OrderItemRepository
         });
     }
 
-    public function countByOrderId(string $orderId): array
+    public function countByOrderId(string $orderId): OrderStats
     {
         return $this->db->withConnection(function (PDO|PDOProxy $pdo) use ($orderId) {
             $stmt = $pdo->prepare(
                 "SELECT
                     COUNT(*) as total,
-                    COUNT(*) FILTER (WHERE status = 'delivered') as delivered
+                    COUNT(*) FILTER (WHERE status = 'delivered') as delivered,
+                    COUNT(*) FILTER (WHERE status = 'refunded') as refunded,
+                    COUNT(*) FILTER (WHERE status = 'delivery_failed') as failed
                  FROM order_items WHERE order_id = ?"
             );
             $stmt->execute([$orderId]);
-            return $stmt->fetch();
+
+            return OrderStats::fromArray($stmt->fetch());
         });
     }
 }
