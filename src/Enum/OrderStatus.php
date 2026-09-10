@@ -21,7 +21,6 @@ enum OrderStatus: string
             self::Delivered,
             self::PaymentFailed,
             self::PartiallyDelivered,
-            self::OutOfStock,
         ], true);
     }
 

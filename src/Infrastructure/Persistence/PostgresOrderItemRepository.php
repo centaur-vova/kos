@@ -74,7 +74,7 @@ final readonly class PostgresOrderItemRepository implements OrderItemRepository
             $stmt = $pdo->prepare(
                 "SELECT * FROM order_items
              WHERE order_id = ?
-             AND status IN ('pending', 'delivering', 'delivery_failed', 'out_of_stock', 'refunded')"
+             AND status IN ('pending', 'delivering', 'delivery_failed', 'out_of_stock')"
             );
             $stmt->execute([$orderId]);
             return $stmt->fetchAll();

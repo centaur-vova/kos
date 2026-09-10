@@ -6,6 +6,8 @@ namespace App\Tests\Behat;
 
 use Behat\Behat\Context\Context;
 use App\DTO\ProviderMockConfig;
+use App\Enum\OrderItemStatus;
+use App\Enum\OrderStatus;
 use PDO;
 use RuntimeException;
 use Swoole\Coroutine as Co;
@@ -19,6 +21,8 @@ final class FeatureContext implements Context
     private array $lastResponse = [];
     private array $firstOrder = [];
     private array $historyResponse = [];
+    /** @var array<string, string> order_code → last payment event_id */
+    private array $paymentEventIds = [];
 
     public function __construct()
     {
@@ -53,9 +57,7 @@ final class FeatureContext implements Context
         $this->lastResponse = [];
         $this->firstOrder = [];
         $this->historyResponse = [];
-
-        // Дополнительно: ждём, чтобы сброс точно применился
-        usleep(100_000); // 100ms
+        $this->paymentEventIds = [];
     }
 
     /**
@@ -173,8 +175,22 @@ final class FeatureContext implements Context
      */
     public function duplicateWebhookSameEventId(): void
     {
-        // Отправляем вебхук с тем же event_id, что и в orderPaid()
-        // Нужно сохранить eventId из orderPaid()
+        $orderCode = $this->order['order_code'] ?? null;
+        if ($orderCode === null) {
+            throw new RuntimeException("No active order in context");
+        }
+
+        $eventId = $this->paymentEventIds[$orderCode] ?? null;
+        if ($eventId === null) {
+            throw new RuntimeException("No payment event_id recorded for order {$orderCode}. Was orderPaid() called?");
+        }
+
+        $this->lastResponse = $this->apiRequest('POST', '/webhook/payment', [
+            'event_id' => $eventId,
+            'order_id' => $orderCode,
+            'status' => 'paid',
+            'amount' => $this->order['price'],
+        ]);
     }
 
     /**
@@ -234,8 +250,11 @@ final class FeatureContext implements Context
             throw new RuntimeException("Cannot pay order: no active order found in context");
         }
 
+        $eventId = 'evt_behat_' . uniqid();
+        $this->paymentEventIds[$this->order['order_code']] = $eventId;
+
         $this->lastResponse = $this->apiRequest('POST', '/webhook/payment', [
-            'event_id' => 'evt_behat_' . uniqid(),
+            'event_id' => $eventId,
             'order_id' => $this->order['order_code'],
             'status' => 'paid',
             'amount' => $this->order['price'],
@@ -282,8 +301,22 @@ final class FeatureContext implements Context
      */
     public function systemProcessesDelivery(): void
     {
-        // Обычный синхронный sleep, так как сам Behat теперь синхронен
-        sleep(3);
+        $orderCode = $this->order['order_code'] ?? null;
+        if ($orderCode === null) {
+            throw new RuntimeException('No active order in context');
+        }
+
+        $this->waitUntil(
+            function (): bool {
+                $order = $this->getOrder();
+                $status = OrderStatus::tryFrom($order['status'] ?? '');
+
+                return $status !== null && ($status->isFinal() || $status->isRecoverable());
+            },
+            timeout: 10.0,
+            interval: 0.1,
+            message: "Order {$orderCode} did not reach a stopped status"
+        );
     }
 
     /**
@@ -429,15 +462,31 @@ final class FeatureContext implements Context
      */
     public function systemRejectsDelivery(): void
     {
-        // Выкачиваем из СУБД состояние актуального Заказа №2
         $order = $this->getOrder();
         $items = $order['items'] ?? [];
 
+        if (empty($items)) {
+            throw new RuntimeException('Order #2 has no items — cannot verify fraud protection');
+        }
+
+        $blockedCode = 'ABCD-1234-DEFG';
+
         foreach ($items as $item) {
-            // Если статус остался "delivering" или сменился на "failed" —
-            // значит антифрод-барьер Саги сработал идеально и заблокировал выдачу!
-            if (($item['delivered_code'] ?? '') === 'ABCD-1234-DEFG' && $item['status'] === 'delivered') {
-                throw new RuntimeException("Saga Security Breach: Duplicate code was accepted and marked as delivered!");
+            $code = $item['delivered_code'] ?? null;
+            $status = OrderItemStatus::tryFrom($item['status'] ?? '');
+
+            // 1. Грязный код не должен быть выдан заказу №2
+            if ($code === $blockedCode) {
+                throw new RuntimeException(
+                    "Saga Security Breach: duplicate code {$blockedCode} leaked into order #2"
+                );
+            }
+
+            // 2. Позиция должна остановиться: финал или восстановимое состояние
+            if ($status === null || (!$status->isTerminal() && !$status->isRecoverable())) {
+                throw new RuntimeException(
+                    "Delivery not resolved for item {$item['sku']}: status=" . ($item['status'] ?? 'null')
+                );
             }
         }
     }
@@ -979,5 +1028,39 @@ final class FeatureContext implements Context
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
+    }
+
+    /**
+     * Ждёт, пока условие не станет true, или падает по таймауту.
+     *
+     * @param callable():bool $condition  Условие. true = дождались. Может бросать исключения — они пробрасываются наружу.
+     * @param float           $timeout    Максимум секунд ожидания.
+     * @param float           $interval   Пауза между попытками в секундах.
+     * @param string          $message    Сообщение при таймауте.
+     */
+    private function waitUntil(
+        callable $condition,
+        float $timeout = 10.0,
+        float $interval = 0.1,
+        string $message = 'Condition not met within timeout'
+    ): void {
+        $deadline = microtime(true) + $timeout;
+        $lastError = null;
+
+        while (microtime(true) < $deadline) {
+            try {
+                if ($condition()) {
+                    return;
+                }
+            } catch (\Throwable $e) {
+                // Запоминаем, но не прерываем цикл — сеть могла моргнуть
+                $lastError = $e;
+            }
+
+            usleep((int)($interval * 10_00_00_0));
+        }
+
+        $suffix = $lastError !== null ? " Last error: {$lastError->getMessage()}" : '';
+        throw new RuntimeException("{$message} (timeout {$timeout}s){$suffix}");
     }
 }

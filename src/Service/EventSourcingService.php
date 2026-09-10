@@ -6,6 +6,8 @@ namespace App\Service;
 
 use App\Domain\Repository\OrderEventRepository;
 use App\Enum\OrderEventType;
+use App\Enum\OrderItemStatus;
+use App\Enum\OrderStatus;
 
 final readonly class EventSourcingService
 {
@@ -44,84 +46,51 @@ final readonly class EventSourcingService
             // НАСТОЯЩИЙ SENIOR-КОНТРАКТ: Мапим строго по .value нашего Backed Enum!
             switch ($type) {
                 case OrderEventType::OrderCreated->value:
-                    $state['status'] = 'created';
+                    $state['status'] = OrderStatus::Created->value;
                     $state['items'] = $data['items'] ?? [];
                     break;
 
                 case OrderEventType::OrderPaid->value:
-                    $state['status'] = 'paid';
+                    $state['status'] = OrderStatus::Paid->value;
                     $state['paid_at'] = $data['paid_at'] ?? null;
                     break;
 
                 case OrderEventType::ItemDelivered->value:
-                    $state['items'] = $this->updateItemStatus($state['items'], (string)$data['item_id'], 'delivered', $data);
+                    $state['items'] = $this->updateItemStatus(
+                        $state['items'],
+                        (string)$data['item_id'],
+                        OrderItemStatus::Delivered->value,
+                        $data
+                    );
                     break;
 
                 case OrderEventType::ItemRefunded->value:
-                    $state['items'] = $this->updateItemStatus($state['items'], (string)$data['item_id'], 'refunded', $data);
+                    $state['items'] = $this->updateItemStatus(
+                        $state['items'],
+                        (string)$data['item_id'],
+                        OrderItemStatus::Refunded->value,
+                        $data
+                    );
                     $state['refunds'][] = $data;
                     break;
 
                 case OrderEventType::OrderDelivered->value:
-                    $state['status'] = 'delivered';
+                    $state['status'] = OrderStatus::Delivered->value;
                     $state['delivered_at'] = $data['delivered_at'] ?? null;
                     break;
 
                 case OrderEventType::OrderPartiallyDelivered->value:
-                    $state['status'] = 'partially_delivered';
+                    $state['status'] = OrderStatus::PartiallyDelivered->value;
                     break;
 
                 case OrderEventType::OrderDeliveryFailed->value:
-                    $state['status'] = 'delivery_failed';
+                    $state['status'] = OrderStatus::DeliveryFailed->value;
                     break;
             }
         }
 
         return $state;
     }
-
-    public function getStateAtUntilId(string $orderId, int $untilEventId): array
-    {
-        $events = $this->eventRepository->findByOrderIdUntilId($orderId, $untilEventId);
-
-        $state = [
-            'status' => 'created',
-            'paid_at' => null,
-            'delivered_at' => null,
-            'items' => [],
-            'refunds' => [],
-            'delivered_items_count' => 0,
-            'refunded_amount_cents' => 0
-        ];
-
-        foreach ($events as $event) {
-            $type = $event['event_type'];
-            $data = json_decode($event['event_data'], true) ?? [];
-
-            switch ($type) {
-                case OrderEventType::OrderCreated->value:
-                    $state['status'] = 'created';
-                    $state['items'] = $data['items'] ?? [];
-                    break;
-                case OrderEventType::OrderPaid->value:
-                    $state['status'] = 'paid';
-                    $state['paid_at'] = $data['paid_at'] ?? null;
-                    break;
-                case OrderEventType::ItemDelivered->value:
-                    $state['items'] = $this->updateItemStatus($state['items'], (string)$data['item_id'], 'delivered', $data);
-                    $state['delivered_items_count']++;
-                    break;
-                case OrderEventType::ItemRefunded->value:
-                    $state['items'] = $this->updateItemStatus($state['items'], (string)$data['item_id'], 'refunded', $data);
-                    $state['refunds'][] = $data;
-                    $state['refunded_amount_cents'] += ($data['refund_amount_cents'] ?? 0);
-                    break;
-            }
-        }
-
-        return $state;
-    }
-
 
     private function updateItemStatus(array $items, string $itemId, string $status, array $data): array
     {
@@ -139,41 +108,6 @@ final readonly class EventSourcingService
         unset($item);
 
         return $items;
-    }
-
-    public function getStateAtPaidStep(string $orderId): array
-    {
-        // Выгребаем хронологический лог эвентов из Postgres
-        $events = $this->eventRepository->findByOrderId($orderId);
-
-        $state = [
-            'status' => 'created',
-            'paid_at' => null,
-            'delivered_at' => null,
-            'items' => [],
-            'refunds' => [],
-            'delivered_items_count' => 0,
-            'refunded_amount_cents' => 0
-        ];
-
-        foreach ($events as $event) {
-            $type = $event['event_type'];
-            $data = json_decode($event['event_data'], true) ?? [];
-
-            if ($type === OrderEventType::OrderCreated->value) {
-                $state['status'] = 'created';
-                $state['items'] = $data['items'] ?? [];
-            }
-
-            if ($type === OrderEventType::OrderPaid->value) {
-                $state['status'] = 'paid';
-                $state['paid_at'] = $data['paid_at'] ?? null;
-                // ФИНАЛЬНАЯ ТOЧКА: Оплата прошла, дальше историю для этого среза не крутим!
-                break;
-            }
-        }
-
-        return $state;
     }
 
     public function getFinancialReport(string $fromDate, string $toDate): array
