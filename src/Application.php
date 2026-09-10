@@ -30,6 +30,7 @@ class Application
         $this->router->post('/orders', [Controller\OrderController::class, 'create']);
         $this->router->get('/orders/{id}', [Controller\OrderController::class, 'show']);
         $this->router->get('/orders/{id}/state', [Controller\OrderController::class, 'stateAt']);
+        $this->router->get('/orders/{id}/events', [Controller\OrderController::class, 'events']);
         $this->router->get('/orders/financial-report', [Controller\OrderController::class, 'financialReport']);
 
         $this->router->get('/catalog', [Controller\CatalogController::class, 'index']);

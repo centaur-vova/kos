@@ -191,14 +191,6 @@ final class FeatureContext implements Context
     }
 
     /**
-     * @Then /^в payments ровно 1 запись$/
-     */
-    public function oneRecordInPayments(): void
-    {
-        // Проверяем через API или БД
-    }
-
-    /**
      * @Given /^поставщик A выдал код, но вернул HTTP 500$/
      */
     public function providerAIssuedCodeButReturned500(): void
@@ -292,14 +284,6 @@ final class FeatureContext implements Context
     {
         // Обычный синхронный sleep, так как сам Behat теперь синхронен
         sleep(3);
-    }
-
-    /**
-     * @Then /^система идёт к поставщику B$/
-     */
-    public function systemGoesToProviderB(): void
-    {
-        // Специфика шага: валидируется через итоговую выдачу от B (см. шаг orderFallbackToProviderB)
     }
 
     /**
@@ -442,7 +426,6 @@ final class FeatureContext implements Context
 
     /**
      * @Then /^система блокирует повторную выдачу для заказа №2$/
-     * @Then /^система отклоняет выдачу$/
      */
     public function systemRejectsDelivery(): void
     {
@@ -561,13 +544,8 @@ final class FeatureContext implements Context
     {
         $events = $this->historyResponse['data']['events'] ?? [];
 
-        // Фоллбэк для Behat: если эндпоинт вернул пустоту из-за UUID-маппинга, собираем эталонный финтех-поток для прохождения теста
         if (empty($events)) {
-            $events = [
-                ['id' => 1, 'event_type' => 'order.created'],
-                ['id' => 2, 'event_type' => 'order.paid'],
-                ['id' => 3, 'event_type' => 'item.delivered'],
-            ];
+            throw new RuntimeException("Event stream is empty — endpoint broken or mapping missing");
         }
 
         $lastId = 0;
@@ -998,14 +976,7 @@ final class FeatureContext implements Context
 
     private function queryDb(string $sql, array $params = []): array
     {
-        $pdo = new PDO(
-            "pgsql:host=postgres;port=5432;dbname=game_shop",
-            "app",
-            "secret",
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-        );
-
-        $stmt = $pdo->prepare($sql);
+        $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
     }
